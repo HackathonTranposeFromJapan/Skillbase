@@ -91,19 +91,20 @@ runs as an agent hook on the critical path of every skill call.
 
 ```bash
 bun install
-bun link                   # puts the local install CLI on your PATH
-bun dev                    # http://localhost:3100
+bun run dev                # http://localhost:3100
 
-# in another terminal, from any project directory:
+# optional — the CLI install path, from any project directory:
+bun link                   # puts the local install CLI on your PATH
 skillbase install design-polish
 cat .claude/skills/design-polish/SKILL.md
 ```
 
-Then open `/dashboard` — your install appears in the activity feed, tagged `this session`.
+Sign in with **demo / demodemo** (mock auth — SSO is disabled in the hackathon build).
 
-Open `/onboarding` for the interactive continuity scenario: put Maya on PTO, generate Alex's
-first week from her proven workflows, and complete his first real task behind a manager approval
-gate.
+The dashboard opens with a Claude-style composer; submitting a prompt opens the chat, where the
+agent answers with markdown, skill cards, and dither-kit charts. Below it: company analytics
+(most-used skills, skills used together, adoption by department, retention, hours saved). Click
+any skill card for its detail modal, any avatar for that person's collection and usage.
 
 ## What is real vs. seeded
 
@@ -114,7 +115,7 @@ We think this distinction matters more than a bigger number on a slide.
 | **Skill-usage telemetry from real agents** — Claude Code and Codex hooks, verified end to end (`bun run e2e`, 8/8) | The 12 skills in the catalog |
 | **Discovered in use** — 59 skills found in real transcripts that nobody had registered | `rating` and `impact` (no measurement path exists for either) |
 | Installs, active users, weekly runs, department split — computed from recorded events | `retention30d` (needs install records that transcripts do not carry) |
-| Natural-language ranking (Claude, per query, with generated reasons) | The onboarding scenario at `/onboarding` — scripted end to end |
+| Natural-language ranking (Claude, per query, with generated reasons) | The dashboard's demo corpus — 21 skills, 14 people, seeded usage |
 | `skillbase install` writing an actual `SKILL.md` to disk | Historical install counts for the seeded catalog |
 | Hexclave auth: CLI login, ingest attribution, RBAC on `skill.visibility` | — |
 
@@ -149,14 +150,20 @@ shows the ordinary catalog, rather than an empty page.
 ## Layout
 
 ```
-data/skills.json            12 seeded skills — catalog, metrics, and the SKILL.md body each one ships
+app/page.tsx                entry — loads the client-only dashboard app
+components/SkillbaseApp.tsx sign-in gate, header, and page shell
+components/chat/            prompt launcher, chat modal, message blocks
+components/overview/        company analytics panels
+components/modals/          chat / skill / person modal stack
+components/dither-kit/      vendored dither-kit chart components
+demo/                       seeded corpus: 21 skills, 14 people, derived analytics
+lib/ai/                     SkillbaseAgent seam — mock agent now, HTTP agent via
+                            NEXT_PUBLIC_SKILLBASE_API (see lib/ai/index.ts)
+data/skills.json            12 seeded skills for the API/CLI path
 lib/rank.ts                 lexical prefilter + model rerank + fallback
 lib/events.ts               in-memory install/run event log
 lib/skills.ts               catalog access, role gating
-app/components/SearchClient.tsx   search + ranked results
-app/dashboard/page.tsx      adoption, growth, abandonment
-app/onboarding/page.tsx     knowledge continuity + role-specific onboarding demo
-app/skill/[slug]/page.tsx   detail + the exact file that gets installed
+app/api/                    search / events / ingest / updates / skills endpoints
 cli/skilldrop-collect.ts    the published CLI: init, install, login, hooks, backfill, flush
 lib/skillbase/              agent-agnostic telemetry — schema, adapters, backfill, beacon
 lib/backend/                catalogue, metrics, feed, Hexclave identity, RBAC
