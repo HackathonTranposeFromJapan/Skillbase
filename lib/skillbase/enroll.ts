@@ -149,23 +149,44 @@ export function enrollCodex(options: EnrollOptions = {}): EnrollResult {
     configPath,
     changed,
     note: changed
-      ? 'hooks added — also set `[features] codex_hooks = true` in ~/.codex/config.toml'
+      ? 'hooks added — enable `[features] hooks = true` and trust the hooks (see below)'
       : 'already enrolled',
   };
 }
 
 /**
- * Codex ships hooks behind a feature flag, so enrollment is inert until it is
- * switched on. Reported rather than edited: config.toml is hand-maintained and
- * rewriting TOML risks losing comments and ordering.
+ * Codex gates hooks behind a feature flag. Reported rather than edited:
+ * config.toml is hand-maintained and rewriting TOML loses comments and ordering.
+ *
+ * The flag is `hooks`; `codex_hooks` is still accepted as a legacy alias, so
+ * both are recognized here.
  */
 export function codexHooksEnabled(): boolean {
   const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex');
   const configPath = join(codexHome, 'config.toml');
   try {
     const toml = readFileSync(configPath, 'utf8');
-    return /^\s*codex_hooks\s*=\s*true/m.test(toml);
+    return /^\s*(codex_)?hooks\s*=\s*true/m.test(toml);
   } catch {
     return false;
   }
 }
+
+/**
+ * Codex additionally requires the hooks to be *trusted*, separately from the
+ * feature flag.
+ *
+ * This matters more than it sounds: an untrusted hook does not warn, error or
+ * log — it is silently skipped, so enrolment looks like it worked and collects
+ * nothing forever. Confirmed on a fresh CODEX_HOME: identical runs recorded zero
+ * events without trust and fired correctly with
+ * `--dangerously-bypass-hook-trust`.
+ *
+ * Interactive Codex prompts for trust on first run; automation must pass the
+ * flag. There is no file to inspect for this, so the CLI always surfaces it as a
+ * required step rather than pretending to detect it.
+ */
+export const CODEX_TRUST_NOTE =
+  'Codex silently skips hooks that have not been trusted — no warning is printed.\n' +
+  'Run `codex` interactively once and accept the hook trust prompt, or pass\n' +
+  '`--dangerously-bypass-hook-trust` for non-interactive runs.';

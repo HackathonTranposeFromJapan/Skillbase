@@ -244,23 +244,71 @@ seen directly against those the beacon also reported.
 
 ---
 
-## Unconfirmed
+## Live end-to-end verification
 
-1. **Explicit vs auto on Claude Code.** All 1,648 historical invocations show
-   `caller.type: "direct"`; the field does not separate the two cases. Whether
-   `UserPromptExpansion` fires alongside `PreToolUse` for a typed command is
-   untested. *Test:* invoke one skill both ways and diff the hook payloads. The
-   marker design is already correct under either outcome.
-2. **Codex hook constraints** (shell-only `PreToolUse`, the feature flag) come
-   from an issue thread and secondary sources, not reproduced here. The
-   SKILL.md-read detection *depends* on shell hooks firing. *Test:* an echo hook
-   against shell, a file read, and a skill activation.
-   The rollout evidence confirms the read happens via `exec_command`; what is
-   unconfirmed is only whether the hook fires for it.
-3. **Whether Codex always reads SKILL.md via shell.** All 9 observed activations
-   used `exec_command`, but a build that inlines the file instead would be
-   invisible to this route. The beacon is the hedge.
-4. **Cursor, Gemini CLI, Hermes.** Cursor has hooks (`beforeShellExecution`,
+`bun scripts/e2e-agents.ts` installs a throwaway skill, launches **real `claude`
+and `codex` processes** against isolated config, makes each use the skill, and
+asserts the collector recorded it. 8/8 checks pass from a clean state.
+
+| Check | Result |
+|---|---|
+| Claude Code ran the skill | `E2E-PROBE-OK` |
+| `invoked` recorded | `trigger=model_auto`, `scope=project`, real `tool_use_id` |
+| `completed` recorded | paired by `tool_use_id`, duration ~70 ms |
+| Codex ran the skill | `E2E-PROBE-OK` |
+| `invoked` recorded | `confidence=0.95`, `detectionNote=skill_md_read` |
+| Cross-agent identity | one content hash `3f26ac0c…` across both agents |
+
+The Codex activation in that run was, verbatim from its own rollout:
+
+```json
+{"type":"function_call","name":"exec_command",
+ "arguments":{"cmd":"sed -n '1,240p' …/.agents/skills/skillbase-e2e/SKILL.md"}}
+```
+
+which is exactly the mechanism inferred from historical rollouts. Codex
+normalizes it to `tool_name: "Bash"` with `tool_input.command` in the hook
+payload, matching what the adapter expected.
+
+Ingest was verified in the same run: all three events reached Postgres through
+`POST /api/ingest` with their trigger, scope, confidence and content hash intact.
+
+### Codex silently skips untrusted hooks
+
+The most important thing the live run found, because nothing reports it.
+
+Codex requires hooks to be **trusted**, separately from the `[features] hooks`
+flag. An untrusted hook produces no warning, no error and no log line — it is
+simply not run. Enrolment therefore *looks* successful and collects nothing,
+indefinitely.
+
+Measured on two fresh `CODEX_HOME`s, identical but for one flag:
+
+| Run | Hooks fired |
+|---|---|
+| fresh home, no bypass | **0 bytes — nothing** |
+| fresh home, `--dangerously-bypass-hook-trust` | 453 bytes — fired |
+
+Interactive Codex prompts for trust on first run; automation must pass the flag.
+`skilldrop-collect enroll` now always prints this, because there is no file to
+check to detect it.
+
+Also corrected by the live run: the feature flag is `hooks`. `codex_hooks` still
+works as a legacy alias, and both `~/.codex/hooks.json` and an inline
+`[[hooks.PreToolUse]]` table in `config.toml` are loaded.
+
+## Still unconfirmed
+
+1. **Explicit vs auto on Claude Code.** The E2E covers the `model_auto` path and
+   confirms it is reported correctly. All 1,648 historical invocations show
+   `caller.type: "direct"`, which does not separate the two cases, and whether
+   `UserPromptExpansion` fires alongside `PreToolUse` for a typed `/command` is
+   still untested. The marker design is correct under either outcome.
+2. **Whether Codex always reads SKILL.md via shell.** Every activation observed —
+   9 historical plus the live probe — used `exec_command`, but a build that
+   inlined the file instead would be invisible to this route. The beacon is the
+   hedge.
+3. **Cursor, Gemini CLI, Hermes.** Cursor has hooks (`beforeShellExecution`,
    `sessionStart`, …) and a skills directory that were verified present; neither
    its hook payloads nor Hermes' surface were investigated. Both are expected to
    be covered by the beacon, which is untested on them.

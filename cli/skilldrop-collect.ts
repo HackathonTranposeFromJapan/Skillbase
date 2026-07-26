@@ -23,7 +23,12 @@ import { adaptClaudeHook, type ClaudeHookPayload } from '../lib/skillbase/adapte
 import { adaptCodexHook, type CodexHookPayload } from '../lib/skillbase/adapters/codex.ts';
 import { backfillClaudeCode } from '../lib/skillbase/backfill/claude-code.ts';
 import { backfillCodex } from '../lib/skillbase/backfill/codex.ts';
-import { codexHooksEnabled, enrollClaudeCode, enrollCodex } from '../lib/skillbase/enroll.ts';
+import {
+  CODEX_TRUST_NOTE,
+  codexHooksEnabled,
+  enrollClaudeCode,
+  enrollCodex,
+} from '../lib/skillbase/enroll.ts';
 import { agentInstallId, skillbaseHome } from '../lib/skillbase/identity.ts';
 import { discoverSkills } from '../lib/skillbase/scan.ts';
 import { AGENT_KINDS, type AgentKind, type SkillEvent } from '../lib/skillbase/schema.ts';
@@ -170,10 +175,12 @@ function runEnroll(args: Args): void {
   if (!codexHooksEnabled()) {
     process.stdout.write(
       '\nCodex hooks are gated behind a feature flag. Add to ~/.codex/config.toml:\n' +
-        '  [features]\n  codex_hooks = true\n' +
-        'Until then, Codex coverage comes from the beacon route only.\n',
+        '  [features]\n  hooks = true\n',
     );
   }
+  // Always shown, flag or not: this step has no on-disk marker to check, and
+  // skipping it produces silence rather than an error.
+  process.stdout.write(`\n${CODEX_TRUST_NOTE}\n`);
   if (options.dryRun) process.stdout.write('\n(dry run — nothing written)\n');
 }
 
