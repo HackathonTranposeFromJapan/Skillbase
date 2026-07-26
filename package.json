@@ -21,6 +21,8 @@
     "e2e": "bun scripts/e2e-agents.ts"
   },
   "dependencies": {
+    "@hexclave/js": "^1.0.67",
+    "@hexclave/next": "^1.0.67",
     "next": "^15.1.6",
     "pg": "^8.22.0",
     "react": "^19.0.0",

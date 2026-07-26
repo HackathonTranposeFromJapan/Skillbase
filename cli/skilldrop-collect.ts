@@ -35,6 +35,16 @@ import {
   enrollCodex,
 } from '../lib/skillbase/enroll.ts';
 import { agentInstallId, skillbaseHome } from '../lib/skillbase/identity.ts';
+import {
+  accessToken,
+  beginLogin,
+  clearAuth,
+  hexclaveConfigured,
+  readAuth,
+  waitForLogin,
+  whoAmI,
+  writeAuth,
+} from '../lib/skillbase/login.ts';
 import { discoverSkills } from '../lib/skillbase/scan.ts';
 import { AGENT_KINDS, type AgentKind, type SkillEvent } from '../lib/skillbase/schema.ts';
 import { appendEvents, flushSpool, readSpool, spoolPath } from '../lib/skillbase/spool.ts';
@@ -42,7 +52,7 @@ import { appendEvents, flushSpool, readSpool, spoolPath } from '../lib/skillbase
 const USAGE = `skilldrop-collect — skill-usage telemetry for AI agents
 
 Usage:
-  skillbase init                                 Detect agents and wire up telemetry
+  skillbase init                                 Detect agents and wire up telemetry\n  skillbase login                                Sign in with Hexclave so events are attributed\n  skillbase whoami / logout
   skilldrop-collect hook claude --event <name>   Read a Claude Code hook payload on stdin
   skilldrop-collect hook codex  --event <name>   Read a Codex hook payload on stdin
   skilldrop-collect emit --skill <ref> [--phase start|end] [--outcome success|error]
@@ -363,8 +373,87 @@ function runBackfill(args: Args): void {
   }
 }
 
+
+/**
+ * `skillbase login` — identify this machine's owner via Hexclave.
+ *
+ * A terminal cannot render a login form, so Hexclave's CLI flow hands the user
+ * to a browser and the CLI polls until they are done. Without this the collector
+ * only knows which device produced an event, never which person, which is why
+ * department-level analytics had nothing to group by.
+ */
+async function runLogin(): Promise<void> {
+  if (!hexclaveConfigured()) {
+    process.stderr.write(
+      'login: Hexclave is not configured.\n' +
+        '  Set HEXCLAVE_PROJECT_ID and HEXCLAVE_PUBLISHABLE_CLIENT_KEY, or run via\n' +
+        '  `npx @hexclave/cli dev --config-file ./hexclave.config.ts -- ...`\n',
+    );
+    process.exit(1);
+  }
+
+  let handle;
+  try {
+    handle = await beginLogin();
+  } catch (error) {
+    process.stderr.write(`login: could not start (${String(error)})\n`);
+    process.exit(1);
+  }
+
+  process.stdout.write('\nOpen this URL to finish signing in:\n\n');
+  process.stdout.write(`  ${handle.loginUrl}\n\n`);
+  process.stdout.write('waiting...\n');
+
+  const refreshToken = await waitForLogin(handle);
+  if (!refreshToken) {
+    process.stderr.write('login: timed out or was cancelled.\n');
+    process.exit(1);
+  }
+
+  writeAuth({
+    refreshToken,
+    projectId: process.env.HEXCLAVE_PROJECT_ID ?? process.env.NEXT_PUBLIC_STACK_PROJECT_ID ?? '',
+    apiUrl: process.env.STACK_API_URL ?? 'https://api.hexclave.com',
+    savedAt: new Date().toISOString(),
+  });
+
+  const token = await accessToken();
+  const me = token ? await whoAmI(token) : null;
+  if (me) {
+    process.stdout.write(`\nsigned in as ${me.displayName ?? me.email ?? me.id}`);
+    process.stdout.write(me.team ? ` (${me.team})\n` : '\n');
+  } else {
+    process.stdout.write('\nsigned in.\n');
+  }
+  process.stdout.write('events will now be attributed to you.\n');
+}
+
+function runLogout(): void {
+  process.stdout.write(clearAuth() ? 'signed out.\n' : 'not signed in.\n');
+}
+
+async function runWhoami(): Promise<void> {
+  if (!readAuth()?.refreshToken) {
+    process.stdout.write('not signed in — run `skillbase login`\n');
+    return;
+  }
+  const token = await accessToken();
+  const me = token ? await whoAmI(token) : null;
+  process.stdout.write(
+    me
+      ? `${me.displayName ?? me.email ?? me.id}${me.team ? ` (${me.team})` : ''}\n`
+      : 'session expired — run `skillbase login` again\n',
+  );
+}
+
 async function runFlush(): Promise<void> {
-  const result = await flushSpool();
+  // A Hexclave session, when there is one, is what lets the server attribute
+  // these events to a person instead of rejecting them.
+  const token = (await accessToken()) ?? undefined;
+  if (!token && readAuth()?.refreshToken) {
+    process.stdout.write('session expired — run `skillbase login` again\n');
+  }
+  const result = await flushSpool({ token });
   if (result.error) {
     process.stdout.write(
       `sent ${result.sent}, ${result.remaining} still queued — ${result.error}\n`,
@@ -414,6 +503,12 @@ async function main(): Promise<void> {
       return runScan(args);
     case 'backfill':
       return runBackfill(args);
+    case 'login':
+      return runLogin();
+    case 'logout':
+      return runLogout();
+    case 'whoami':
+      return runWhoami();
     case 'flush':
       return runFlush();
     case 'status':

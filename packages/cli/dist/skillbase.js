@@ -2,9 +2,9 @@
 // @bun
 
 // cli/skilldrop-collect.ts
-import { existsSync as existsSync10 } from "fs";
+import { existsSync as existsSync11 } from "fs";
 import { homedir as homedir8 } from "os";
-import { join as join10, resolve } from "path";
+import { join as join11, resolve } from "path";
 
 // lib/skillbase/identity.ts
 import { createHash, randomUUID } from "node:crypto";
@@ -1322,38 +1322,157 @@ function agentInstallId2(agentKind) {
   return id;
 }
 
-// lib/skillbase/scan.ts
-import { existsSync as existsSync8, readdirSync as readdirSync4, readFileSync as readFileSync8, statSync as statSync4 } from "node:fs";
-import { homedir as homedir7 } from "node:os";
+// lib/skillbase/login.ts
+import { existsSync as existsSync8, mkdirSync as mkdirSync5, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "node:fs";
 import { join as join8 } from "node:path";
+var DEFAULT_API = "https://api.hexclave.com";
+var POLL_INTERVAL_MS = 2000;
+var POLL_TIMEOUT_MS = 5 * 60000;
+function authPath() {
+  return join8(skillbaseHome(), "auth.json");
+}
+function apiUrl() {
+  return (process.env.HEXCLAVE_API_URL ?? process.env.STACK_API_URL ?? DEFAULT_API).replace(/\/$/, "");
+}
+function projectId() {
+  return process.env.HEXCLAVE_PROJECT_ID ?? process.env.NEXT_PUBLIC_STACK_PROJECT_ID ?? process.env.STACK_PROJECT_ID ?? null;
+}
+function publishableKey() {
+  return process.env.HEXCLAVE_PUBLISHABLE_CLIENT_KEY ?? process.env.NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY ?? process.env.STACK_PUBLISHABLE_CLIENT_KEY ?? null;
+}
+function readAuth() {
+  try {
+    return JSON.parse(readFileSync8(authPath(), "utf8"));
+  } catch {
+    return null;
+  }
+}
+function writeAuth(auth) {
+  mkdirSync5(skillbaseHome(), { recursive: true });
+  writeFileSync5(authPath(), JSON.stringify(auth, null, 2), { encoding: "utf8", mode: 384 });
+}
+function clearAuth() {
+  const path = authPath();
+  if (!existsSync8(path))
+    return false;
+  writeFileSync5(path, "{}", "utf8");
+  return true;
+}
+function clientHeaders() {
+  return {
+    "content-type": "application/json",
+    "x-hexclave-access-type": "client",
+    "x-hexclave-project-id": projectId() ?? "",
+    "x-hexclave-publishable-client-key": publishableKey() ?? ""
+  };
+}
+async function post(path, body, extra = {}) {
+  const res = await fetch(`${apiUrl()}/api/v1${path}`, {
+    method: "POST",
+    headers: { ...clientHeaders(), ...extra },
+    body: JSON.stringify(body ?? {}),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!res.ok)
+    throw new Error(`hexclave ${path} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+async function beginLogin() {
+  const data = await post("/auth/cli", {
+    expires_in_millis: POLL_TIMEOUT_MS
+  });
+  const pollingCode = data.polling_code;
+  if (!pollingCode)
+    throw new Error("hexclave did not return a polling code");
+  const loginUrl = data.login_url ?? `${apiUrl()}/api/v1/auth/cli?login_code=${encodeURIComponent(data.login_code ?? "")}`;
+  return { loginUrl, pollingCode };
+}
+async function waitForLogin(handle) {
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const poll = await post("/auth/cli/poll", { polling_code: handle.pollingCode });
+    if (poll.refresh_token)
+      return poll.refresh_token;
+    if (poll.status === "expired")
+      return null;
+    if (poll.status === "completed" || poll.status === "success") {
+      const done = await post("/auth/cli/complete", {
+        polling_code: handle.pollingCode
+      });
+      return done.refresh_token ?? null;
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  return null;
+}
+async function accessToken() {
+  const auth = readAuth();
+  if (!auth?.refreshToken)
+    return null;
+  try {
+    const data = await post("/auth/sessions/current/refresh", {}, {
+      "x-hexclave-refresh-token": auth.refreshToken
+    });
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+async function whoAmI(token) {
+  try {
+    const res = await fetch(`${apiUrl()}/api/v1/users/me`, {
+      headers: { ...clientHeaders(), "x-hexclave-access-token": token },
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!res.ok)
+      return null;
+    const user = await res.json();
+    return {
+      id: user.id,
+      displayName: user.display_name ?? null,
+      email: user.primary_email ?? null,
+      team: user.selected_team?.display_name ?? null
+    };
+  } catch {
+    return null;
+  }
+}
+function hexclaveConfigured() {
+  return Boolean(projectId() && publishableKey());
+}
+
+// lib/skillbase/scan.ts
+import { existsSync as existsSync9, readdirSync as readdirSync4, readFileSync as readFileSync9, statSync as statSync4 } from "node:fs";
+import { homedir as homedir7 } from "node:os";
+import { join as join9 } from "node:path";
 function searchPaths2(agentKind, cwd) {
   const home = homedir7();
   const paths = [];
   switch (agentKind) {
     case "claude_code":
-      paths.push({ dir: join8(home, ".claude", "skills"), scope: "user" });
+      paths.push({ dir: join9(home, ".claude", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join8(cwd, ".claude", "skills"), scope: "project" });
+        paths.push({ dir: join9(cwd, ".claude", "skills"), scope: "project" });
       break;
     case "codex":
-      paths.push({ dir: join8(home, ".agents", "skills"), scope: "user" });
-      paths.push({ dir: join8(home, ".codex", "skills"), scope: "user" });
+      paths.push({ dir: join9(home, ".agents", "skills"), scope: "user" });
+      paths.push({ dir: join9(home, ".codex", "skills"), scope: "user" });
       if (cwd) {
-        paths.push({ dir: join8(cwd, ".agents", "skills"), scope: "project" });
-        paths.push({ dir: join8(cwd, ".codex", "skills"), scope: "project" });
+        paths.push({ dir: join9(cwd, ".agents", "skills"), scope: "project" });
+        paths.push({ dir: join9(cwd, ".codex", "skills"), scope: "project" });
       }
       paths.push({ dir: "/etc/codex/skills", scope: "admin" });
       break;
     case "cursor":
-      paths.push({ dir: join8(home, ".cursor", "skills-cursor"), scope: "user" });
-      paths.push({ dir: join8(home, ".cursor", "skills"), scope: "user" });
+      paths.push({ dir: join9(home, ".cursor", "skills-cursor"), scope: "user" });
+      paths.push({ dir: join9(home, ".cursor", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join8(cwd, ".cursor", "skills"), scope: "project" });
+        paths.push({ dir: join9(cwd, ".cursor", "skills"), scope: "project" });
       break;
     default:
-      paths.push({ dir: join8(home, ".agents", "skills"), scope: "user" });
+      paths.push({ dir: join9(home, ".agents", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join8(cwd, ".agents", "skills"), scope: "project" });
+        paths.push({ dir: join9(cwd, ".agents", "skills"), scope: "project" });
       break;
   }
   return paths;
@@ -1419,14 +1538,14 @@ function readBlockScalar2(frontmatter, key) {
   return text.length > 0 ? text : null;
 }
 function readSkillDir2(dir, name, scope) {
-  const skillMdPath = join8(dir, name, "SKILL.md");
-  if (!existsSync8(skillMdPath))
+  const skillMdPath = join9(dir, name, "SKILL.md");
+  if (!existsSync9(skillMdPath))
     return null;
   try {
-    const markdown = readFileSync8(skillMdPath, "utf8");
+    const markdown = readFileSync9(skillMdPath, "utf8");
     return {
       name,
-      path: join8(dir, name),
+      path: join9(dir, name),
       skillMdPath,
       scope,
       contentHash: skillContentHash(markdown),
@@ -1440,7 +1559,7 @@ function discoverSkills2(agentKind, cwd) {
   const found = [];
   const seen = new Set;
   for (const { dir, scope } of searchPaths2(agentKind, cwd)) {
-    if (!existsSync8(dir))
+    if (!existsSync9(dir))
       continue;
     let entries;
     try {
@@ -1450,7 +1569,7 @@ function discoverSkills2(agentKind, cwd) {
     }
     for (const entry of entries) {
       try {
-        if (!statSync4(join8(dir, entry)).isDirectory())
+        if (!statSync4(join9(dir, entry)).isDirectory())
           continue;
       } catch {
         continue;
@@ -1478,12 +1597,12 @@ var AGENT_KINDS2 = [
 ];
 
 // lib/skillbase/spool.ts
-import { appendFileSync, mkdirSync as mkdirSync5, readFileSync as readFileSync9, renameSync as renameSync2, unlinkSync, writeFileSync as writeFileSync5 } from "node:fs";
-import { existsSync as existsSync9 } from "node:fs";
-import { join as join9 } from "node:path";
+import { appendFileSync, mkdirSync as mkdirSync6, readFileSync as readFileSync10, renameSync as renameSync2, unlinkSync, writeFileSync as writeFileSync6 } from "node:fs";
+import { existsSync as existsSync10 } from "node:fs";
+import { join as join10 } from "node:path";
 var SPOOL_FILE = "spool.jsonl";
 function spoolPath() {
-  return join9(skillbaseHome(), SPOOL_FILE);
+  return join10(skillbaseHome(), SPOOL_FILE);
 }
 function appendEvents(events) {
   const errors = [];
@@ -1498,7 +1617,7 @@ function appendEvents(events) {
   }
   if (lines.length > 0) {
     try {
-      mkdirSync5(skillbaseHome(), { recursive: true });
+      mkdirSync6(skillbaseHome(), { recursive: true });
       appendFileSync(spoolPath(), `${lines.join(`
 `)}
 `, "utf8");
@@ -1510,10 +1629,10 @@ function appendEvents(events) {
   return { written: lines.length, errors };
 }
 function readSpool() {
-  if (!existsSync9(spoolPath()))
+  if (!existsSync10(spoolPath()))
     return [];
   const events = [];
-  for (const line of readFileSync9(spoolPath(), "utf8").split(`
+  for (const line of readFileSync10(spoolPath(), "utf8").split(`
 `)) {
     if (!line.trim())
       continue;
@@ -1570,7 +1689,7 @@ function writeRemaining(events) {
     return;
   }
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync5(tmp, `${events.map((e) => JSON.stringify(e)).join(`
+  writeFileSync6(tmp, `${events.map((e) => JSON.stringify(e)).join(`
 `)}
 `, "utf8");
   renameSync2(tmp, path);
@@ -1581,6 +1700,8 @@ var USAGE = `skilldrop-collect \u2014 skill-usage telemetry for AI agents
 
 Usage:
   skillbase init                                 Detect agents and wire up telemetry
+  skillbase login                                Sign in with Hexclave so events are attributed
+  skillbase whoami / logout
   skilldrop-collect hook claude --event <name>   Read a Claude Code hook payload on stdin
   skilldrop-collect hook codex  --event <name>   Read a Codex hook payload on stdin
   skilldrop-collect emit --skill <ref> [--phase start|end] [--outcome success|error]
@@ -1746,18 +1867,18 @@ function selfCommand() {
     return "npx -y skillbase";
   const resolved = resolve(self);
   const ephemeral = /[/\\](_npx|\.npm[/\\]_cacache|node_modules[/\\]\.bin)[/\\]/.test(resolved);
-  if (ephemeral || !existsSync10(resolved))
+  if (ephemeral || !existsSync11(resolved))
     return "npx -y skillbase";
   return resolved.includes(" ") ? `"${resolved}"` : resolved;
 }
 function agentConfigExists(agent) {
   const home = homedir8();
   const paths = {
-    claude_code: [join10(home, ".claude")],
-    codex: [join10(home, ".codex")],
-    cursor: [join10(home, ".cursor")]
+    claude_code: [join11(home, ".claude")],
+    codex: [join11(home, ".codex")],
+    cursor: [join11(home, ".cursor")]
   };
-  return (paths[agent] ?? []).some((p) => existsSync10(p));
+  return (paths[agent] ?? []).some((p) => existsSync11(p));
 }
 function runEnroll(args) {
   const options = {
@@ -1866,8 +1987,79 @@ wrote ${written} events to ${spoolPath()}
 `);
   }
 }
+async function runLogin() {
+  if (!hexclaveConfigured()) {
+    process.stderr.write(`login: Hexclave is not configured.
+` + `  Set HEXCLAVE_PROJECT_ID and HEXCLAVE_PUBLISHABLE_CLIENT_KEY, or run via
+` + "  `npx @hexclave/cli dev --config-file ./hexclave.config.ts -- ...`\n");
+    process.exit(1);
+  }
+  let handle;
+  try {
+    handle = await beginLogin();
+  } catch (error) {
+    process.stderr.write(`login: could not start (${String(error)})
+`);
+    process.exit(1);
+  }
+  process.stdout.write(`
+Open this URL to finish signing in:
+
+`);
+  process.stdout.write(`  ${handle.loginUrl}
+
+`);
+  process.stdout.write(`waiting...
+`);
+  const refreshToken = await waitForLogin(handle);
+  if (!refreshToken) {
+    process.stderr.write(`login: timed out or was cancelled.
+`);
+    process.exit(1);
+  }
+  writeAuth({
+    refreshToken,
+    projectId: process.env.HEXCLAVE_PROJECT_ID ?? process.env.NEXT_PUBLIC_STACK_PROJECT_ID ?? "",
+    apiUrl: process.env.STACK_API_URL ?? "https://api.hexclave.com",
+    savedAt: new Date().toISOString()
+  });
+  const token = await accessToken();
+  const me = token ? await whoAmI(token) : null;
+  if (me) {
+    process.stdout.write(`
+signed in as ${me.displayName ?? me.email ?? me.id}`);
+    process.stdout.write(me.team ? ` (${me.team})
+` : `
+`);
+  } else {
+    process.stdout.write(`
+signed in.
+`);
+  }
+  process.stdout.write(`events will now be attributed to you.
+`);
+}
+function runLogout() {
+  process.stdout.write(clearAuth() ? `signed out.
+` : `not signed in.
+`);
+}
+async function runWhoami() {
+  if (!readAuth()?.refreshToken) {
+    process.stdout.write("not signed in \u2014 run `skillbase login`\n");
+    return;
+  }
+  const token = await accessToken();
+  const me = token ? await whoAmI(token) : null;
+  process.stdout.write(me ? `${me.displayName ?? me.email ?? me.id}${me.team ? ` (${me.team})` : ""}
+` : "session expired \u2014 run `skillbase login` again\n");
+}
 async function runFlush() {
-  const result = await flushSpool();
+  const token = await accessToken() ?? undefined;
+  if (!token && readAuth()?.refreshToken) {
+    process.stdout.write("session expired \u2014 run `skillbase login` again\n");
+  }
+  const result = await flushSpool({ token });
   if (result.error) {
     process.stdout.write(`sent ${result.sent}, ${result.remaining} still queued \u2014 ${result.error}
 `);
@@ -1922,6 +2114,12 @@ async function main() {
       return runScan(args);
     case "backfill":
       return runBackfill(args);
+    case "login":
+      return runLogin();
+    case "logout":
+      return runLogout();
+    case "whoami":
+      return runWhoami();
     case "flush":
       return runFlush();
     case "status":

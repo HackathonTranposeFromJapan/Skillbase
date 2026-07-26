@@ -9,7 +9,8 @@
 
 import { NextResponse } from 'next/server';
 
-import { DEMO_TENANT_ID, query } from '@/lib/db';
+import { bearerToken, hexclaveEnabled, resolveCaller } from '@/lib/backend/identity';
+import { query } from '@/lib/db';
 import { validateSkillEvent } from '@/lib/skillbase/schema';
 
 export const runtime = 'nodejs';
@@ -18,6 +19,16 @@ export const dynamic = 'force-dynamic';
 const MAX_BATCH = 5_000;
 
 export async function POST(req: Request): Promise<NextResponse> {
+  // Who the events belong to is decided by the token, never by the payload —
+  // otherwise any caller could attribute activity to anyone.
+  const caller = await resolveCaller(bearerToken(req));
+  if (hexclaveEnabled() && !caller.authenticated) {
+    return NextResponse.json(
+      { error: 'unauthorized — run `skillbase login` first' },
+      { status: 401 },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const events = (body as { events?: unknown })?.events;
 
@@ -52,9 +63,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
+  // Stamp the verified identity onto every event, overriding whatever the
+  // client sent. The device knows which machine it is; only the server knows
+  // who the person is.
+  const attributed = accepted.map((event) => ({
+    ...(event as Record<string, unknown>),
+    tenantId: caller.tenantId,
+    ...(caller.principalId ? { principalId: caller.principalId } : {}),
+  }));
+
   const rows = await query<{ inserted: number }>(
     'select ingest_skill_events($1::uuid, $2::jsonb) as inserted',
-    [DEMO_TENANT_ID, JSON.stringify(accepted)],
+    [caller.tenantId, JSON.stringify(attributed)],
+    caller.tenantId,
   );
 
   if (rows === null) {
@@ -67,17 +88,24 @@ export async function POST(req: Request): Promise<NextResponse> {
     received: events.length,
     inserted: rows[0]?.inserted ?? 0,
     rejected: rejected.length,
+    attributedTo: caller.authenticated
+      ? { user: caller.displayName, team: caller.teamName }
+      : 'demo tenant (Hexclave not configured)',
     ...(rejected.length > 0 ? { errors: rejected.slice(0, 5) } : {}),
   });
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: Request): Promise<NextResponse> {
+  // Health reports on the caller's own tenant, so a signed-in user sees their
+  // team's counts rather than the demo tenant's.
+  const caller = await resolveCaller(bearerToken(req));
   const rows = await query<{ events: string; skills: string; last: Date | null }>(
     `select count(*)::text as events,
             count(distinct observed_skill_name)::text as skills,
             max(occurred_at) as last
        from skill_event where tenant_id = $1`,
-    [DEMO_TENANT_ID],
+    [caller.tenantId],
+    caller.tenantId,
   );
 
   if (rows === null) return NextResponse.json({ ready: false, reason: 'database unavailable' });

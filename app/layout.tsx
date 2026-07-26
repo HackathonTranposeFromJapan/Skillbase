@@ -1,5 +1,8 @@
+import { HexclaveProvider, HexclaveTheme } from "@hexclave/next";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { hexclaveServerApp } from "@/hexclave/server";
+import { AccountBadge } from "./components/AccountBadge";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,6 +15,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <HexclaveProvider app={hexclaveServerApp}>
+          <HexclaveTheme>
         <div className="aurora" />
         <div className="relative z-10">
           <header className="sticky top-0 z-20 border-b border-white/6 bg-ink-950/80 backdrop-blur-xl">
@@ -35,16 +40,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   Dashboard
                 </Link>
               </nav>
-              <div className="ml-auto hidden items-center gap-2 font-mono text-[11px] text-mute-400 sm:flex">
-                <span className="hidden sm:inline">acme-corp</span>
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-ink-700 text-[10px] text-mute-200">
-                  YT
-                </span>
+              <div className="ml-auto flex items-center gap-2 font-mono text-[11px] text-mute-400">
+                <AccountBadge />
               </div>
             </div>
           </header>
           {children}
         </div>
+          </HexclaveTheme>
+        </HexclaveProvider>
       </body>
     </html>
   );
