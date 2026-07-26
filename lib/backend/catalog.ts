@@ -14,9 +14,19 @@
 import { DEMO_TENANT_ID, query, type DataSource } from '@/lib/db';
 import { SKILLS, type Skill } from '@/lib/skills';
 
-export type MeasuredSkill = Skill & {
+export type MeasuredSkill = Omit<Skill, 'retention30d'> & {
   /** True when this skill's numbers came from recorded events. */
   measured: boolean;
+  /**
+   * `null` when retention is unknown, which is different from zero.
+   *
+   * Transcript backfill recovers usage but no install records, so retention
+   * cannot be computed for a discovered skill. Reporting that as 0 made the
+   * dashboard's "installed, then abandoned" list accuse 24 genuinely popular
+   * skills of total abandonment — a fabricated negative claim about real data,
+   * which is worse than an obviously fake number.
+   */
+  retention30d: number | null;
 };
 
 export interface CatalogResult {
@@ -179,17 +189,18 @@ export async function getCatalog(): Promise<CatalogResult> {
 
   const bySlug = new Map(metrics.map((row) => [row.slug, row]));
 
-  const applyMetrics = (skill: Skill): MeasuredSkill => {
+  const applyMetrics = (skill: CatalogEntry): MeasuredSkill => {
     const row = bySlug.get(skill.slug);
-    if (!row) return asUnmeasured(skill);
+    if (!row) return { ...skill, measured: false };
 
     return {
       ...skill,
       installs: toInt(row.installs, skill.installs),
       activeUsers: toInt(row.active_users, skill.activeUsers),
       weeklyUsage: normalizeWeekly(row.weekly) ?? skill.weeklyUsage,
-      // Retention needs recorded installs, which transcript backfill does not
-      // provide; the catalogue value stands in until real installs arrive.
+      // Retention is not computed from backfilled telemetry: it needs recorded
+      // installs. A seed skill keeps its catalogue figure; a discovered one
+      // stays null, which the UI must render as "not measured" rather than 0.
       retention30d: row.retention_30d === null ? skill.retention30d : Number(row.retention_30d),
       adoptionByDept: row.dept_adoption ?? skill.adoptionByDept,
       measured: true,
@@ -236,7 +247,10 @@ interface RegistryRow {
  * plausible numbers would blur the line between what was measured and what was
  * made up.
  */
-function fromRegistry(row: RegistryRow): Skill {
+/** A catalogue entry before metrics are applied. */
+type CatalogEntry = Omit<Skill, 'retention30d'> & { retention30d: number | null };
+
+function fromRegistry(row: RegistryRow): CatalogEntry {
   return {
     slug: row.slug,
     name: row.display_name,
@@ -253,12 +267,19 @@ function fromRegistry(row: RegistryRow): Skill {
     installs: 0,
     activeUsers: 0,
     rating: 0,
-    retention30d: 0,
+    // Unknown, not zero.
+    retention30d: null,
     adoptionByDept: {},
     weeklyUsage: [],
     impact: '',
     body: '',
   };
+}
+
+/** One skill by slug, from the seed catalogue or the registry. */
+export async function getSkillDetail(slug: string): Promise<MeasuredSkill | null> {
+  const { skills } = await getCatalog();
+  return skills.find((s) => s.slug === slug) ?? null;
 }
 
 function asUnmeasured(skill: Skill): MeasuredSkill {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSkill, SKILLS } from "@/lib/skills";
+import { getSkillDetail } from "@/lib/backend/catalog";
+import { SKILLS } from "@/lib/skills";
 import { BarList } from "../../components/BarList";
 import { Sparkline } from "../../components/Sparkline";
 import { InstallCommand } from "./InstallCommand";
@@ -11,7 +12,10 @@ export function generateStaticParams() {
 
 export default async function SkillPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const skill = getSkill(slug);
+  // Resolved through the catalogue rather than the seed file, so skills the
+  // registry knows about — including discovered ones the dashboard links to —
+  // get a page instead of a 404.
+  const skill = await getSkillDetail(slug);
   if (!skill) notFound();
 
   const adoption = Object.entries(skill.adoptionByDept)
@@ -61,8 +65,13 @@ export default async function SkillPage({ params }: { params: Promise<{ slug: st
         {[
           { label: "Installs", value: skill.installs.toLocaleString() },
           { label: "Active users", value: skill.activeUsers.toLocaleString() },
-          { label: "Rating", value: `${skill.rating} ★` },
-          { label: "30-day retention", value: `${Math.round(skill.retention30d * 100)}%` },
+          // A discovered skill has no rating and no measured retention. Showing
+          // "—" keeps an unknown from reading as a zero.
+          { label: "Rating", value: skill.rating > 0 ? `${skill.rating} ★` : "—" },
+          {
+            label: "30-day retention",
+            value: skill.retention30d === null ? "—" : `${Math.round(skill.retention30d * 100)}%`,
+          },
         ].map((s) => (
           <div key={s.label} className="card p-4">
             <p className="font-mono text-[10.5px] uppercase tracking-wider text-mute-400">

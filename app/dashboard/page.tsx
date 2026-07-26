@@ -32,7 +32,10 @@ export default async function Dashboard() {
     .map((s) => ({
       label: s.name,
       value: s.installs,
-      note: `${s.activeUsers} active · ${Math.round(s.retention30d * 100)}% still using it after 30 days`,
+      note:
+        s.retention30d === null
+          ? `${s.activeUsers} active · retention not measured yet`
+          : `${s.activeUsers} active · ${Math.round(s.retention30d * 100)}% still using it after 30 days`,
     }));
 
   const fastestGrowing = [...SKILLS]
@@ -57,8 +60,12 @@ export default async function Dashboard() {
     .sort((a, b) => b.value - a.value);
 
   // Skills where installs are high but retention is low — the ones to fix.
-  const atRisk = [...SKILLS]
-    .filter((s) => s.retention30d < 0.6)
+  // Skills whose retention was never measured are excluded rather than treated
+  // as zero: calling a heavily used skill abandoned because we lack install
+  // records would be a fabricated claim about real data.
+  const atRisk = SKILLS.filter(
+    (s): s is typeof s & { retention30d: number } => s.retention30d !== null && s.retention30d < 0.6,
+  )
     .sort((a, b) => a.retention30d - b.retention30d)
     .slice(0, 3);
 
