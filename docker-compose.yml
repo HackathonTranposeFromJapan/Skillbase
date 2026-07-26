@@ -1,0 +1,24 @@
+# Local Postgres for Skillbase.
+#
+# Port 55432 rather than 5432: developer machines usually already have something
+# on the default port, and a demo is a bad time to discover a conflict.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: skillbase-db
+    environment:
+      POSTGRES_USER: skillbase
+      POSTGRES_PASSWORD: skillbase
+      POSTGRES_DB: skillbase
+    ports:
+      - '55432:5432'
+    volumes:
+      - skillbase-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U skillbase -d skillbase']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  skillbase-db-data:

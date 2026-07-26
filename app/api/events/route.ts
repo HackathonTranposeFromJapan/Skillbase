@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { listEvents, recordEvent } from "@/lib/events";
+import { getFeed } from "@/lib/backend/feed";
+import { recordEvent } from "@/lib/events";
 import { getSkill } from "@/lib/skills";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ events: listEvents() });
+  // Recorded telemetry when the database is up, seed activity when it is not.
+  const { events, source } = await getFeed();
+  return NextResponse.json({ events, source });
 }
 
 export async function POST(req: Request) {

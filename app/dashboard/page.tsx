@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SKILLS } from "@/lib/skills";
+import { getCatalog } from "@/lib/backend/catalog";
 import { BarList } from "../components/BarList";
 import { LiveFeed } from "../components/LiveFeed";
 import { Sparkline } from "../components/Sparkline";
@@ -12,7 +12,16 @@ function growth(series: number[]): number {
   return Math.round(((last - first) / first) * 100);
 }
 
-export default function Dashboard() {
+function ago(iso: string): string {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
+
+export default async function Dashboard() {
+  const { skills: SKILLS, shadow, source } = await getCatalog();
+
   const totalInstalls = SKILLS.reduce((n, s) => n + s.installs, 0);
   const totalActive = SKILLS.reduce((n, s) => n + s.activeUsers, 0);
   const weeklyRuns = SKILLS.reduce((n, s) => n + s.weeklyUsage[s.weeklyUsage.length - 1], 0);
@@ -62,6 +71,11 @@ export default function Dashboard() {
         <p className="mt-1.5 text-[13.5px] text-mute-400">
           Which internal AI workflows are actually spreading — and which ones people quietly
           abandon.
+        </p>
+        <p className="mt-2 font-mono text-[10.5px] uppercase tracking-wider text-mute-400">
+          {source === "db"
+            ? "live · measured from collected agent telemetry"
+            : "sample data · start the collector to see measured usage"}
         </p>
       </div>
 
@@ -113,6 +127,40 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
+
+      {shadow.length > 0 && (
+        <section className="card mb-6 p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[13px] font-semibold tracking-tight text-white">
+              Discovered in use — not in the library
+            </h2>
+            <span className="rounded-full border border-amber-400/20 bg-amber-400/8 px-2.5 py-1 font-mono text-[9.5px] text-amber-300">
+              {shadow.length} UNREGISTERED
+            </span>
+          </div>
+          <p className="mb-4 mt-1 text-[11.5px] text-mute-400">
+            Skills people are already running that nobody published. Found by reading agent
+            telemetry — no one had to report them.
+          </p>
+          <ul className="space-y-1">
+            {shadow.slice(0, 8).map((s) => (
+              <li
+                key={`${s.agentKind}:${s.name}`}
+                className="flex items-center gap-3 border-b border-white/5 py-2 text-[12.5px] last:border-0"
+              >
+                <span className="w-14 shrink-0 text-right font-mono text-[11px] text-amber-400">
+                  {s.invocations.toLocaleString()}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-mute-200">{s.name}</span>
+                <span className="shrink-0 font-mono text-[10px] text-mute-400">{s.agentKind}</span>
+                <span className="w-20 shrink-0 text-right text-[11px] text-mute-400">
+                  {ago(s.lastSeen)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mb-6 grid gap-3 lg:grid-cols-[1.15fr_1fr]">
         <div className="card p-5">

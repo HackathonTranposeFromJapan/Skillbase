@@ -126,13 +126,15 @@ begin
   get diagnostics v_count = row_count;
   v_resolved := v_resolved + v_count;
 
+  -- Match either half of a `team/name` slug, or a bare slug, since the registry
+  -- is allowed to hold un-namespaced entries.
   update skill_event e
      set skill_id = s.id
     from skill s
    where e.tenant_id = p_tenant
      and e.skill_id is null
      and s.tenant_id = e.tenant_id
-     and split_part(s.slug, '/', 2) = e.observed_skill_name;
+     and coalesce(nullif(split_part(s.slug, '/', 2), ''), s.slug) = e.observed_skill_name;
   get diagnostics v_count = row_count;
   v_resolved := v_resolved + v_count;
 
