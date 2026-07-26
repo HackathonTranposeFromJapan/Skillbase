@@ -105,7 +105,7 @@ Then point at result #5:
 **3 — Install for real (25s).** Terminal B:
 
 ```bash
-skilldrop install design-polish
+skillbase install design-polish
 cat .claude/skills/design-polish/SKILL.md
 ```
 

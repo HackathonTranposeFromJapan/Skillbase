@@ -76,7 +76,7 @@ export function SearchClient() {
   }
 
   function copy(slug: string) {
-    navigator.clipboard?.writeText(`skilldrop install ${slug}`);
+    navigator.clipboard?.writeText(`skillbase install ${slug}`);
     setCopied(slug);
     setTimeout(() => setCopied((c) => (c === slug ? null : c)), 1600);
   }
@@ -182,7 +182,7 @@ export function SearchClient() {
               },
               {
                 n: "02",
-                h: "skilldrop install",
+                h: "skillbase install",
                 p: "The skill file lands in your agent's skill directory. Claude Code, Cursor, or your internal agent.",
               },
               {
@@ -309,7 +309,7 @@ export function SearchClient() {
                         ? "request access"
                         : copied === r.slug
                           ? "copied ✓"
-                          : "skilldrop install"}
+                          : "skillbase install"}
                     </button>
                   </div>
                 </div>

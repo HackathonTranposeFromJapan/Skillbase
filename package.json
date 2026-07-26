@@ -18,7 +18,8 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build:cli": "bun scripts/build-cli.ts",
-    "e2e": "bun scripts/e2e-agents.ts"
+    "e2e": "bun scripts/e2e-agents.ts",
+    "skillbase": "bun cli/skilldrop-collect.ts"
   },
   "dependencies": {
     "@hexclave/js": "^1.0.67",

@@ -4,7 +4,7 @@
 // cli/skilldrop-collect.ts
 import { existsSync as existsSync11 } from "fs";
 import { homedir as homedir8 } from "os";
-import { join as join11, resolve } from "path";
+import { join as join12, resolve as resolve2 } from "path";
 
 // lib/skillbase/identity.ts
 import { createHash, randomUUID } from "node:crypto";
@@ -1322,14 +1322,114 @@ function agentInstallId2(agentKind) {
   return id;
 }
 
+// lib/skillbase/install.ts
+import { mkdirSync as mkdirSync5, readdirSync as readdirSync4, rmSync, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { join as join8, resolve } from "node:path";
+
+// lib/skillbase/adapters/beacon.ts
+var BEACON_MARKER2 = "<!-- skillbase:beacon -->";
+var BEACON_PACKAGE2 = "skillbase";
+function beaconSnippet2(skillRef) {
+  return [
+    BEACON_MARKER2,
+    "## Telemetry (managed by Skillbase — do not edit)",
+    "",
+    "Run this first, before any other step in this skill:",
+    "",
+    "```bash",
+    `npx -y ${BEACON_PACKAGE2} emit --skill ${skillRef} --phase start`,
+    "```",
+    "",
+    "Optionally, once the skill is finished:",
+    "",
+    "```bash",
+    `npx -y ${BEACON_PACKAGE2} emit --skill ${skillRef} --phase end`,
+    "```",
+    "",
+    "This records only the skill name, version and timing. No prompt, argument or",
+    "output content is transmitted.",
+    BEACON_MARKER2,
+    ""
+  ].join(`
+`);
+}
+
+// lib/skillbase/install.ts
+function registryUrl() {
+  return (process.env.SKILLBASE_URL ?? "http://localhost:3100").replace(/\/$/, "");
+}
+function skillDir() {
+  return resolve(process.env.SKILLBASE_TARGET ?? ".claude/skills");
+}
+async function installSkill(slug, options = {}) {
+  if (!slug)
+    return { ok: false, message: "usage: skillbase install <skill-name>" };
+  let skill;
+  try {
+    const res = await fetch(`${registryUrl()}/api/skills/${encodeURIComponent(slug)}`, {
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!res.ok) {
+      return { ok: false, message: `skill "${slug}" not found in the registry at ${registryUrl()}` };
+    }
+    skill = await res.json();
+  } catch {
+    return { ok: false, message: `cannot reach the registry at ${registryUrl()}` };
+  }
+  if (!skill.body)
+    return { ok: false, message: `"${slug}" has no SKILL.md body to install` };
+  const dir = join8(skillDir(), slug);
+  const file = join8(dir, "SKILL.md");
+  try {
+    mkdirSync5(dir, { recursive: true });
+    const body = options.beacon ? `${skill.body.trimEnd()}
+
+${beaconSnippet2(skill.slug)}` : skill.body;
+    writeFileSync5(file, body, "utf8");
+  } catch (error) {
+    return { ok: false, message: `could not write ${file}: ${String(error)}` };
+  }
+  await fetch(`${registryUrl()}/api/events`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "install", slug, actor: process.env.SKILLBASE_ACTOR ?? "you@" }),
+    signal: AbortSignal.timeout(5000)
+  }).catch(() => {
+    return;
+  });
+  return { ok: true, message: `installed ${skill.name}`, path: file, skill };
+}
+function listInstalled() {
+  try {
+    statSync4(skillDir());
+  } catch {
+    return [];
+  }
+  try {
+    return readdirSync4(skillDir(), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch {
+    return [];
+  }
+}
+function uninstallSkill(slug) {
+  if (!slug)
+    return false;
+  try {
+    rmSync(join8(skillDir(), slug), { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // lib/skillbase/login.ts
-import { existsSync as existsSync8, mkdirSync as mkdirSync5, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import { join as join9 } from "node:path";
 var DEFAULT_API = "https://api.hexclave.com";
 var POLL_INTERVAL_MS = 2000;
 var POLL_TIMEOUT_MS = 5 * 60000;
 function authPath() {
-  return join8(skillbaseHome(), "auth.json");
+  return join9(skillbaseHome(), "auth.json");
 }
 function apiUrl() {
   return (process.env.HEXCLAVE_API_URL ?? process.env.STACK_API_URL ?? DEFAULT_API).replace(/\/$/, "");
@@ -1348,14 +1448,14 @@ function readAuth() {
   }
 }
 function writeAuth(auth) {
-  mkdirSync5(skillbaseHome(), { recursive: true });
-  writeFileSync5(authPath(), JSON.stringify(auth, null, 2), { encoding: "utf8", mode: 384 });
+  mkdirSync6(skillbaseHome(), { recursive: true });
+  writeFileSync6(authPath(), JSON.stringify(auth, null, 2), { encoding: "utf8", mode: 384 });
 }
 function clearAuth() {
   const path = authPath();
   if (!existsSync8(path))
     return false;
-  writeFileSync5(path, "{}", "utf8");
+  writeFileSync6(path, "{}", "utf8");
   return true;
 }
 function clientHeaders() {
@@ -1442,37 +1542,37 @@ function hexclaveConfigured() {
 }
 
 // lib/skillbase/scan.ts
-import { existsSync as existsSync9, readdirSync as readdirSync4, readFileSync as readFileSync9, statSync as statSync4 } from "node:fs";
+import { existsSync as existsSync9, readdirSync as readdirSync5, readFileSync as readFileSync9, statSync as statSync5 } from "node:fs";
 import { homedir as homedir7 } from "node:os";
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 function searchPaths2(agentKind, cwd) {
   const home = homedir7();
   const paths = [];
   switch (agentKind) {
     case "claude_code":
-      paths.push({ dir: join9(home, ".claude", "skills"), scope: "user" });
+      paths.push({ dir: join10(home, ".claude", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join9(cwd, ".claude", "skills"), scope: "project" });
+        paths.push({ dir: join10(cwd, ".claude", "skills"), scope: "project" });
       break;
     case "codex":
-      paths.push({ dir: join9(home, ".agents", "skills"), scope: "user" });
-      paths.push({ dir: join9(home, ".codex", "skills"), scope: "user" });
+      paths.push({ dir: join10(home, ".agents", "skills"), scope: "user" });
+      paths.push({ dir: join10(home, ".codex", "skills"), scope: "user" });
       if (cwd) {
-        paths.push({ dir: join9(cwd, ".agents", "skills"), scope: "project" });
-        paths.push({ dir: join9(cwd, ".codex", "skills"), scope: "project" });
+        paths.push({ dir: join10(cwd, ".agents", "skills"), scope: "project" });
+        paths.push({ dir: join10(cwd, ".codex", "skills"), scope: "project" });
       }
       paths.push({ dir: "/etc/codex/skills", scope: "admin" });
       break;
     case "cursor":
-      paths.push({ dir: join9(home, ".cursor", "skills-cursor"), scope: "user" });
-      paths.push({ dir: join9(home, ".cursor", "skills"), scope: "user" });
+      paths.push({ dir: join10(home, ".cursor", "skills-cursor"), scope: "user" });
+      paths.push({ dir: join10(home, ".cursor", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join9(cwd, ".cursor", "skills"), scope: "project" });
+        paths.push({ dir: join10(cwd, ".cursor", "skills"), scope: "project" });
       break;
     default:
-      paths.push({ dir: join9(home, ".agents", "skills"), scope: "user" });
+      paths.push({ dir: join10(home, ".agents", "skills"), scope: "user" });
       if (cwd)
-        paths.push({ dir: join9(cwd, ".agents", "skills"), scope: "project" });
+        paths.push({ dir: join10(cwd, ".agents", "skills"), scope: "project" });
       break;
   }
   return paths;
@@ -1538,14 +1638,14 @@ function readBlockScalar2(frontmatter, key) {
   return text.length > 0 ? text : null;
 }
 function readSkillDir2(dir, name, scope) {
-  const skillMdPath = join9(dir, name, "SKILL.md");
+  const skillMdPath = join10(dir, name, "SKILL.md");
   if (!existsSync9(skillMdPath))
     return null;
   try {
     const markdown = readFileSync9(skillMdPath, "utf8");
     return {
       name,
-      path: join9(dir, name),
+      path: join10(dir, name),
       skillMdPath,
       scope,
       contentHash: skillContentHash(markdown),
@@ -1563,13 +1663,13 @@ function discoverSkills2(agentKind, cwd) {
       continue;
     let entries;
     try {
-      entries = readdirSync4(dir);
+      entries = readdirSync5(dir);
     } catch {
       continue;
     }
     for (const entry of entries) {
       try {
-        if (!statSync4(join9(dir, entry)).isDirectory())
+        if (!statSync5(join10(dir, entry)).isDirectory())
           continue;
       } catch {
         continue;
@@ -1597,12 +1697,12 @@ var AGENT_KINDS2 = [
 ];
 
 // lib/skillbase/spool.ts
-import { appendFileSync, mkdirSync as mkdirSync6, readFileSync as readFileSync10, renameSync as renameSync2, unlinkSync, writeFileSync as writeFileSync6 } from "node:fs";
+import { appendFileSync, mkdirSync as mkdirSync7, readFileSync as readFileSync10, renameSync as renameSync2, unlinkSync, writeFileSync as writeFileSync7 } from "node:fs";
 import { existsSync as existsSync10 } from "node:fs";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 var SPOOL_FILE = "spool.jsonl";
 function spoolPath() {
-  return join10(skillbaseHome(), SPOOL_FILE);
+  return join11(skillbaseHome(), SPOOL_FILE);
 }
 function appendEvents(events) {
   const errors = [];
@@ -1617,7 +1717,7 @@ function appendEvents(events) {
   }
   if (lines.length > 0) {
     try {
-      mkdirSync6(skillbaseHome(), { recursive: true });
+      mkdirSync7(skillbaseHome(), { recursive: true });
       appendFileSync(spoolPath(), `${lines.join(`
 `)}
 `, "utf8");
@@ -1689,7 +1789,7 @@ function writeRemaining(events) {
     return;
   }
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync6(tmp, `${events.map((e) => JSON.stringify(e)).join(`
+  writeFileSync7(tmp, `${events.map((e) => JSON.stringify(e)).join(`
 `)}
 `, "utf8");
   renameSync2(tmp, path);
@@ -1700,6 +1800,8 @@ var USAGE = `skilldrop-collect \u2014 skill-usage telemetry for AI agents
 
 Usage:
   skillbase init                                 Detect agents and wire up telemetry
+  skillbase install <skill> [--beacon]           Install a skill from the registry
+  skillbase list / uninstall <skill>
   skillbase login                                Sign in with Hexclave so events are attributed
   skillbase whoami / logout
   skilldrop-collect hook claude --event <name>   Read a Claude Code hook payload on stdin
@@ -1866,7 +1968,7 @@ function selfCommand() {
   const self = process.argv[1];
   if (!self)
     return "npx -y skillbase";
-  const resolved = resolve(self);
+  const resolved = resolve2(self);
   const ephemeral = /[/\\](_npx|\.npm[/\\]_cacache|node_modules[/\\]\.bin)[/\\]/.test(resolved);
   if (ephemeral || !existsSync11(resolved))
     return "npx -y skillbase";
@@ -1875,9 +1977,9 @@ function selfCommand() {
 function agentConfigExists(agent) {
   const home = homedir8();
   const paths = {
-    claude_code: [join11(home, ".claude")],
-    codex: [join11(home, ".codex")],
-    cursor: [join11(home, ".cursor")]
+    claude_code: [join12(home, ".claude")],
+    codex: [join12(home, ".codex")],
+    cursor: [join12(home, ".cursor")]
   };
   return (paths[agent] ?? []).some((p) => existsSync11(p));
 }
@@ -2055,6 +2157,56 @@ async function runWhoami() {
   process.stdout.write(me ? `${me.displayName ?? me.email ?? me.id}${me.team ? ` (${me.team})` : ""}
 ` : "session expired \u2014 run `skillbase login` again\n");
 }
+async function runInstall(args) {
+  const slug = args.positional[1] ?? "";
+  const result = await installSkill(slug, { beacon: Boolean(args.flags.beacon) });
+  if (!result.ok) {
+    process.stderr.write(`${result.message}
+`);
+    process.exit(1);
+  }
+  const version = result.skill?.version ? ` v${result.skill.version}` : "";
+  process.stdout.write(`
+  installed ${result.skill?.name ?? slug}${version}
+`);
+  process.stdout.write(`  ${result.path}
+`);
+  if (result.skill?.tagline)
+    process.stdout.write(`  ${result.skill.tagline}
+`);
+  process.stdout.write(`
+  Your agent can use this skill now.
+
+`);
+}
+function runList() {
+  const skills = listInstalled();
+  if (skills.length === 0) {
+    process.stdout.write(`no skills installed in ${skillDir()}
+`);
+    return;
+  }
+  process.stdout.write(`
+installed skills (${skillDir()})
+
+`);
+  for (const name of skills)
+    process.stdout.write(`  ${name}
+`);
+  process.stdout.write(`
+`);
+}
+function runUninstall(args) {
+  const slug = args.positional[1] ?? "";
+  if (!slug) {
+    process.stderr.write(`usage: skillbase uninstall <skill-name>
+`);
+    process.exit(1);
+  }
+  process.stdout.write(uninstallSkill(slug) ? `removed ${slug}
+` : `could not remove ${slug}
+`);
+}
 async function runFlush() {
   const token = await accessToken() ?? undefined;
   if (!token && readAuth()?.refreshToken) {
@@ -2115,6 +2267,12 @@ async function main() {
       return runScan(args);
     case "backfill":
       return runBackfill(args);
+    case "install":
+      return runInstall(args);
+    case "list":
+      return runList();
+    case "uninstall":
+      return runUninstall(args);
     case "login":
       return runLogin();
     case "logout":

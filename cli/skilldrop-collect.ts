@@ -36,6 +36,12 @@ import {
 } from '../lib/skillbase/enroll.ts';
 import { agentInstallId, skillbaseHome } from '../lib/skillbase/identity.ts';
 import {
+  installSkill,
+  listInstalled,
+  skillDir,
+  uninstallSkill,
+} from '../lib/skillbase/install.ts';
+import {
   accessToken,
   beginLogin,
   clearAuth,
@@ -52,7 +58,9 @@ import { appendEvents, flushSpool, readSpool, spoolPath } from '../lib/skillbase
 const USAGE = `skilldrop-collect — skill-usage telemetry for AI agents
 
 Usage:
-  skillbase init                                 Detect agents and wire up telemetry\n  skillbase login                                Sign in with Hexclave so events are attributed\n  skillbase whoami / logout
+  skillbase init                                 Detect agents and wire up telemetry
+  skillbase install <skill> [--beacon]           Install a skill from the registry
+  skillbase list / uninstall <skill>\n  skillbase login                                Sign in with Hexclave so events are attributed\n  skillbase whoami / logout
   skilldrop-collect hook claude --event <name>   Read a Claude Code hook payload on stdin
   skilldrop-collect hook codex  --event <name>   Read a Codex hook payload on stdin
   skilldrop-collect emit --skill <ref> [--phase start|end] [--outcome success|error]
@@ -450,6 +458,43 @@ async function runWhoami(): Promise<void> {
   );
 }
 
+
+async function runInstall(args: Args): Promise<void> {
+  const slug = args.positional[1] ?? '';
+  const result = await installSkill(slug, { beacon: Boolean(args.flags.beacon) });
+
+  if (!result.ok) {
+    process.stderr.write(`${result.message}\n`);
+    process.exit(1);
+  }
+
+  const version = result.skill?.version ? ` v${result.skill.version}` : '';
+  process.stdout.write(`\n  installed ${result.skill?.name ?? slug}${version}\n`);
+  process.stdout.write(`  ${result.path}\n`);
+  if (result.skill?.tagline) process.stdout.write(`  ${result.skill.tagline}\n`);
+  process.stdout.write('\n  Your agent can use this skill now.\n\n');
+}
+
+function runList(): void {
+  const skills = listInstalled();
+  if (skills.length === 0) {
+    process.stdout.write(`no skills installed in ${skillDir()}\n`);
+    return;
+  }
+  process.stdout.write(`\ninstalled skills (${skillDir()})\n\n`);
+  for (const name of skills) process.stdout.write(`  ${name}\n`);
+  process.stdout.write('\n');
+}
+
+function runUninstall(args: Args): void {
+  const slug = args.positional[1] ?? '';
+  if (!slug) {
+    process.stderr.write('usage: skillbase uninstall <skill-name>\n');
+    process.exit(1);
+  }
+  process.stdout.write(uninstallSkill(slug) ? `removed ${slug}\n` : `could not remove ${slug}\n`);
+}
+
 async function runFlush(): Promise<void> {
   // A Hexclave session, when there is one, is what lets the server attribute
   // these events to a person instead of rejecting them.
@@ -507,6 +552,12 @@ async function main(): Promise<void> {
       return runScan(args);
     case 'backfill':
       return runBackfill(args);
+    case 'install':
+      return runInstall(args);
+    case 'list':
+      return runList();
+    case 'uninstall':
+      return runUninstall(args);
     case 'login':
       return runLogin();
     case 'logout':

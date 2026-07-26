@@ -13,7 +13,7 @@ export function InstallCommand({
 }) {
   const [copied, setCopied] = useState(false);
   const [requested, setRequested] = useState(false);
-  const cmd = `skilldrop install ${slug}`;
+  const cmd = `skillbase install ${slug}`;
 
   if (locked) {
     return (

@@ -36,13 +36,13 @@ Companies solved this for code with npm, and for containers with a registry.
 ## What Skillbase does
 
 ```
-search by outcome  →  skilldrop install  →  your agent has the skill  →  adoption flows back
+search by outcome  →  skillbase install  →  your agent has the skill  →  adoption flows back
 ```
 
 1. **Search by outcome, not by name.** *"I want a skill that makes product designs look cleaner
    and more consistent"* → ranked skills, each with a one-line explanation of why it fits **your**
    role and **your** words.
-2. **Install into a real agent.** `skilldrop install design-polish` writes a real
+2. **Install into a real agent.** `skillbase install design-polish` writes a real
    `SKILL.md` into `.claude/skills/` — the agent has the capability immediately.
 3. **Measure what spreads.** Installs and runs report back. The dashboard shows adoption by
    department, what is growing, and — the useful half — **what people installed and then quietly
@@ -95,7 +95,7 @@ bun link                   # puts the local install CLI on your PATH
 bun dev                    # http://localhost:3100
 
 # in another terminal, from any project directory:
-skilldrop install design-polish
+skillbase install design-polish
 cat .claude/skills/design-polish/SKILL.md
 ```
 
@@ -111,10 +111,12 @@ We think this distinction matters more than a bigger number on a slide.
 
 | Real | Seeded |
 |---|---|
-| Natural-language ranking (Claude, per query, with generated reasons) | The 12 skills in the catalog |
-| `skilldrop install` writing an actual `SKILL.md` to disk | Historical install/run counts and adoption rates |
-| Install events reported to the registry and rendered live | The 10 backdated activity events |
-| Role-based install gating on restricted skills | — |
+| **Skill-usage telemetry from real agents** — Claude Code and Codex hooks, verified end to end (`bun run e2e`, 8/8) | The 12 skills in the catalog |
+| **Discovered in use** — 59 skills found in real transcripts that nobody had registered | `rating` and `impact` (no measurement path exists for either) |
+| Installs, active users, weekly runs, department split — computed from recorded events | `retention30d` (needs install records that transcripts do not carry) |
+| Natural-language ranking (Claude, per query, with generated reasons) | The onboarding scenario at `/onboarding` — scripted end to end |
+| `skillbase install` writing an actual `SKILL.md` to disk | Historical install counts for the seeded catalog |
+| Hexclave auth: CLI login, ingest attribution, RBAC on `skill.visibility` | — |
 
 Every event produced during a session is tagged **`this session`** in the UI, and the dashboard
 states in plain text how many of the visible events are real. Nothing on screen claims to be
@@ -137,11 +139,12 @@ It uses `ANTHROPIC_API_KEY` when set, and otherwise shells out to a local `claud
 
 ## Governance
 
-Skills carry a `requiredRole`. A designer searching for `contract-review` finds it — discovery is
-not the thing you want to restrict — but install is blocked, and the detail page offers a request
-path instead of the command. Enforcement lives at the registry, not in the client.
+Skills carry a `visibility` tier — company, department, manager-approved, experimental, official —
+enforced server-side against Hexclave team permissions (`skills_read` / `skills_manager` /
+`skills_admin`). A client-side check is a UX affordance, not access control.
 
-This is the natural home for a real identity provider; `requiredRole` is the seam.
+Signed out is deliberately not the same as denied: with no session the app is a public demo and
+shows the ordinary catalog, rather than an empty page.
 
 ## Layout
 
@@ -154,11 +157,17 @@ app/components/SearchClient.tsx   search + ranked results
 app/dashboard/page.tsx      adoption, growth, abandonment
 app/onboarding/page.tsx     knowledge continuity + role-specific onboarding demo
 app/skill/[slug]/page.tsx   detail + the exact file that gets installed
-cli/skilldrop.ts            install / list / uninstall + adoption reporting
+cli/skilldrop-collect.ts    the published CLI: init, install, login, hooks, backfill, flush
+lib/skillbase/              agent-agnostic telemetry — schema, adapters, backfill, beacon
+lib/backend/                catalogue, metrics, feed, Hexclave identity, RBAC
+supabase/migrations/        identity, events, rollups, RLS
+scripts/e2e-agents.ts       end-to-end test against real claude and codex processes
 ```
 
-No database and no auth — the event log is in memory, which is the right scope for a five-hour
-build and an honest thing to say out loud.
+Postgres backs the analytics and Hexclave backs identity, but both degrade: with
+no database the app runs on the seed catalog, and with no Hexclave session it
+runs as a public demo. The dashboard states which it is showing rather than
+implying seeded numbers were measured.
 
 ## Where this goes
 
