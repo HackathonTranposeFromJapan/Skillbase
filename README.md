@@ -42,11 +42,34 @@ search by outcome  →  skilldrop install  →  your agent has the skill  →  a
 4. **Onboard from proven work.** Map single-owner skills, generate a role-specific first week,
    and verify readiness by completing a real task with the same permissions as the team.
 
-## Try it
+## Measure your own agents (one line)
+
+```bash
+npx skillbase init
+```
+
+Detects Claude Code, Codex and Cursor, wires the telemetry hooks into each, and
+tells you what it found. Then, to see usage you already have rather than waiting
+for new activity:
+
+```bash
+npx skillbase backfill claude   # reads local transcripts; no instrumentation needed
+npx skillbase status
+```
+
+Events queue locally and nothing is transmitted until `SKILLBASE_INGEST_URL` is
+set. The published CLI is a single dependency-free file on Node 18+, because it
+runs as an agent hook on the critical path of every skill call.
+
+> **Note on the name.** `skilldrop` on npm is an unrelated product in this same
+> space. Skillbase publishes as `skillbase`; `npx skilldrop` is somebody else's
+> CLI.
+
+## Try the app
 
 ```bash
 bun install
-bun link                   # puts `skilldrop` on your PATH
+bun link                   # puts the local install CLI on your PATH
 bun dev                    # http://localhost:3100
 
 # in another terminal, from any project directory:

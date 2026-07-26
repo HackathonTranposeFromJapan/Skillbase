@@ -18,6 +18,10 @@
  * hour, and rightly so.
  */
 
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { adaptBeacon, beaconSnippet, detectAgentKind } from '../lib/skillbase/adapters/beacon.ts';
 import { adaptClaudeHook, type ClaudeHookPayload } from '../lib/skillbase/adapters/claude-code.ts';
 import { adaptCodexHook, type CodexHookPayload } from '../lib/skillbase/adapters/codex.ts';
@@ -37,6 +41,7 @@ import { appendEvents, flushSpool, readSpool, spoolPath } from '../lib/skillbase
 const USAGE = `skilldrop-collect — skill-usage telemetry for AI agents
 
 Usage:
+  skillbase init                                 Detect agents and wire up telemetry
   skilldrop-collect hook claude --event <name>   Read a Claude Code hook payload on stdin
   skilldrop-collect hook codex  --event <name>   Read a Codex hook payload on stdin
   skilldrop-collect emit --skill <ref> [--phase start|end] [--outcome success|error]
@@ -157,6 +162,67 @@ function runEmit(args: Args): void {
     if (args.flags.verbose) process.stderr.write(`emit failed: ${String(error)}\n`);
   }
   process.exit(0);
+}
+
+/**
+ * The one-liner: `npx skillbase init`.
+ *
+ * Detects which agents are installed, wires the hooks into each, and reports
+ * what it found. Kept to a single command with no required flags because the
+ * first thing a new user does is the thing most likely to be abandoned.
+ */
+function runInit(args: Args): void {
+  const dryRun = Boolean(args.flags['dry-run']);
+  process.stdout.write('\nSkillbase — skill usage telemetry for AI agents\n\n');
+
+  const detected: AgentKind[] = [];
+  for (const agent of ['claude_code', 'codex', 'cursor'] as AgentKind[]) {
+    const skills = discoverSkills(agent, process.cwd());
+    const configured = agentConfigExists(agent);
+    if (!configured && skills.length === 0) continue;
+    detected.push(agent);
+    process.stdout.write(`  found ${agent.padEnd(12)} ${skills.length} skill(s)\n`);
+  }
+
+  if (detected.length === 0) {
+    process.stdout.write('  no supported agents found on this machine.\n');
+    process.stdout.write('  Skillbase supports Claude Code, Codex and Cursor.\n\n');
+    return;
+  }
+
+  process.stdout.write('\nwiring hooks\n');
+  const command = str(args.flags, 'command') ?? 'npx -y skillbase';
+  for (const result of [enrollClaudeCode({ command, dryRun }), enrollCodex({ command, dryRun })]) {
+    process.stdout.write(`  ${result.agent.padEnd(12)} ${result.changed ? 'configured' : 'already set up'}\n`);
+  }
+
+  if (detected.includes('codex')) {
+    process.stdout.write(`\n${CODEX_TRUST_NOTE}\n`);
+    if (!codexHooksEnabled()) {
+      process.stdout.write('\nAlso add to ~/.codex/config.toml:\n  [features]\n  hooks = true\n');
+    }
+  }
+
+  process.stdout.write('\nnext\n');
+  process.stdout.write('  npx skillbase backfill claude   # recover past usage, no waiting\n');
+  process.stdout.write('  npx skillbase status            # what has been collected\n');
+  if (!process.env.SKILLBASE_INGEST_URL) {
+    process.stdout.write('\n  set SKILLBASE_INGEST_URL to send events to your Skillbase server.\n');
+    process.stdout.write('  until then events queue locally and nothing is transmitted.\n');
+  }
+  if (dryRun) process.stdout.write('\n(dry run — nothing written)\n');
+  process.stdout.write('\n');
+}
+
+/** Whether the agent is installed at all, independent of having skills. */
+function agentConfigExists(agent: AgentKind): boolean {
+  const home = homedir();
+  const paths: Record<string, string[]> = {
+    claude_code: [join(home, '.claude')],
+    codex: [join(home, '.codex')],
+    cursor: [join(home, '.cursor')],
+  };
+  return (paths[agent] ?? []).some((p) => existsSync(p));
 }
 
 function runEnroll(args: Args): void {
@@ -312,6 +378,8 @@ async function main(): Promise<void> {
     }
     case 'emit':
       return runEmit(args);
+    case 'init':
+      return runInit(args);
     case 'enroll':
       return runEnroll(args);
     case 'scan':

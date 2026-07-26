@@ -1,0 +1,36 @@
+{
+  "name": "skillbase",
+  "version": "0.1.0",
+  "description": "Skill usage telemetry for AI coding agents — Claude Code, Codex, Cursor and any agent that reads SKILL.md",
+  "keywords": [
+    "skills",
+    "SKILL.md",
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "cursor",
+    "telemetry",
+    "observability"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HackathonTranposeFromJapan/Skillbase.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/HackathonTranposeFromJapan/Skillbase#readme",
+  "type": "module",
+  "bin": {
+    "skillbase": "dist/skillbase.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

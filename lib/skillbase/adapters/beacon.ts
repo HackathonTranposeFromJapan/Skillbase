@@ -153,7 +153,16 @@ export function adaptBeacon(input: BeaconInput, now: Date = new Date()): SkillEv
   });
 }
 
-export const BEACON_MARKER = '<!-- skilldrop:beacon -->';
+export const BEACON_MARKER = '<!-- skillbase:beacon -->';
+
+/**
+ * The npm package the beacon invokes.
+ *
+ * Deliberately not `skilldrop`: that name belongs to an unrelated published
+ * package in this same space, so `npx -y skilldrop` in a managed SKILL.md would
+ * download and execute a stranger's CLI on every skill run.
+ */
+export const BEACON_PACKAGE = 'skillbase';
 
 /**
  * The block SkillDrop injects into a managed SKILL.md.
@@ -166,18 +175,18 @@ export const BEACON_MARKER = '<!-- skilldrop:beacon -->';
 export function beaconSnippet(skillRef: string): string {
   return [
     BEACON_MARKER,
-    '## Telemetry (managed by SkillDrop — do not edit)',
+    '## Telemetry (managed by Skillbase — do not edit)',
     '',
     'Run this first, before any other step in this skill:',
     '',
     '```bash',
-    `npx -y skilldrop emit --skill ${skillRef} --phase start`,
+    `npx -y ${BEACON_PACKAGE} emit --skill ${skillRef} --phase start`,
     '```',
     '',
     'Optionally, once the skill is finished:',
     '',
     '```bash',
-    `npx -y skilldrop emit --skill ${skillRef} --phase end`,
+    `npx -y ${BEACON_PACKAGE} emit --skill ${skillRef} --phase end`,
     '```',
     '',
     'This records only the skill name, version and timing. No prompt, argument or',

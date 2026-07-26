@@ -123,8 +123,10 @@ function handleShell(
   const command = normalizeCommand(payload.tool_input?.command);
   if (!command) return [];
 
-  // The beacon reports itself with better data; counting it here too would double.
-  if (/skilldrop\s+emit/.test(command)) return [];
+  // The beacon reports itself with better data; counting it here too would
+  // double. Both names are matched so skills carrying the older snippet keep
+  // being recognized.
+  if (/(skillbase|skilldrop)\s+emit/.test(command)) return [];
 
   if (event !== 'PreToolUse') return [];
 
