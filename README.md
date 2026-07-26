@@ -3,6 +3,14 @@
 **Turn proven work into company capability.** Describe the outcome you want, install the workflow
 a colleague already proved, and onboard new teammates from how your company actually works.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main/install.sh | sh
+```
+
+Measures which AI-agent skills your team actually uses — across Claude Code, Codex and Cursor.
+Node 18+ only; no npm, no clone. It can read usage you already have, so there is nothing to wait
+for. [How it works →](#measure-your-own-agents)
+
 Built at **c0mpiled-13: Startup School Hackathon II** (Transpose Platform, SF — July 25, 2026).
 YC RFS tracks: *Company Brain* / *The AI Operating System for Companies*.
 
@@ -42,14 +50,10 @@ search by outcome  →  skilldrop install  →  your agent has the skill  →  a
 4. **Onboard from proven work.** Map single-owner skills, generate a role-specific first week,
    and verify readiness by completing a real task with the same permissions as the team.
 
-## Measure your own agents (one line)
+## Measure your own agents
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main/install.sh | sh
-```
-
-Detects Claude Code, Codex and Cursor, wires the telemetry hooks into each, and
-tells you what it found:
+The one-liner at the top detects Claude Code, Codex and Cursor, wires the
+telemetry hooks into each, and tells you what it found:
 
 ```
   found claude_code  10 skill(s)
