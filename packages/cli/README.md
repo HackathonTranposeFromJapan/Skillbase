@@ -7,16 +7,13 @@ are actually used, on Claude Code, Codex, Cursor, and any agent that can run a
 shell command.
 
 ```bash
-npx skillbase init
-```
-
-Or without npm — Node 18+ is the only requirement:
-
-```bash
 curl -fsSL https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main/install.sh | sh
 ```
 
-Detects the agents installed on the machine and wires the hooks into each.
+Node 18+ is the only requirement. Detects the agents installed on the machine
+and wires the hooks into each.
+
+Installed from npm instead? `npx skillbase init` does the same thing.
 
 ## Why it is one file with no dependencies
 
