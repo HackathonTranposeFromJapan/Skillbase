@@ -10,6 +10,12 @@ shell command.
 npx skillbase init
 ```
 
+Or without npm — Node 18+ is the only requirement:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main/install.sh | sh
+```
+
 Detects the agents installed on the machine and wires the hooks into each.
 
 ## Why it is one file with no dependencies

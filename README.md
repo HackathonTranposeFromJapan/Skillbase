@@ -45,17 +45,27 @@ search by outcome  →  skilldrop install  →  your agent has the skill  →  a
 ## Measure your own agents (one line)
 
 ```bash
-npx skillbase init
+curl -fsSL https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main/install.sh | sh
 ```
 
 Detects Claude Code, Codex and Cursor, wires the telemetry hooks into each, and
-tells you what it found. Then, to see usage you already have rather than waiting
-for new activity:
+tells you what it found:
+
+```
+  found claude_code  10 skill(s)
+  found codex        2 skill(s)
+  found cursor       20 skill(s)
+```
+
+Then, to see usage you already have rather than waiting for new activity:
 
 ```bash
-npx skillbase backfill claude   # reads local transcripts; no instrumentation needed
-npx skillbase status
+skillbase backfill claude   # reads local transcripts; no instrumentation needed
+skillbase status
 ```
+
+Only Node 18+ is required — no npm, no Bun, no clone. Once the package is
+published, `npx skillbase init` will do the same thing.
 
 Events queue locally and nothing is transmitted until `SKILLBASE_INGEST_URL` is
 set. The published CLI is a single dependency-free file on Node 18+, because it
