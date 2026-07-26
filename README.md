@@ -64,8 +64,16 @@ skillbase backfill claude   # reads local transcripts; no instrumentation needed
 skillbase status
 ```
 
-Only Node 18+ is required — no npm, no Bun, no clone. Once the package is
-published, `npx skillbase init` will do the same thing.
+Only Node 18+ is required — no npm, no Bun, no clone.
+
+Prefer `npx`? This runs the same binary straight from the release, also without
+publishing anything (~2s):
+
+```bash
+npx -y https://github.com/HackathonTranposeFromJapan/Skillbase/releases/download/v0.1.0/skillbase-0.1.0.tgz init
+```
+
+Once the package is published to npm this becomes `npx skillbase init`.
 
 Events queue locally and nothing is transmitted until `SKILLBASE_INGEST_URL` is
 set. The published CLI is a single dependency-free file on Node 18+, because it
