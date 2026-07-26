@@ -4,7 +4,7 @@
 // cli/skilldrop-collect.ts
 import { existsSync as existsSync10 } from "fs";
 import { homedir as homedir8 } from "os";
-import { join as join10 } from "path";
+import { join as join10, resolve } from "path";
 
 // lib/skillbase/identity.ts
 import { createHash, randomUUID } from "node:crypto";
@@ -1675,7 +1675,7 @@ Skillbase \u2014 skill usage telemetry for AI agents
   process.stdout.write(`
 wiring hooks
 `);
-  const command = str(args.flags, "command") ?? "npx -y skillbase";
+  const command = str(args.flags, "command") ?? selfCommand();
   for (const result of [enrollClaudeCode({ command, dryRun }), enrollCodex({ command, dryRun })]) {
     process.stdout.write(`  ${result.agent.padEnd(12)} ${result.changed ? "configured" : "already set up"}
 `);
@@ -1712,6 +1712,16 @@ next
 `);
   process.stdout.write(`
 `);
+}
+function selfCommand() {
+  const self = process.argv[1];
+  if (!self)
+    return "npx -y skillbase";
+  const resolved = resolve(self);
+  const ephemeral = /[/\\](_npx|\.npm[/\\]_cacache|node_modules[/\\]\.bin)[/\\]/.test(resolved);
+  if (ephemeral || !existsSync10(resolved))
+    return "npx -y skillbase";
+  return resolved.includes(" ") ? `"${resolved}"` : resolved;
 }
 function agentConfigExists(agent) {
   const home = homedir8();

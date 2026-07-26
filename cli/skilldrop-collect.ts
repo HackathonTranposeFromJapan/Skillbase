@@ -20,7 +20,7 @@
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { adaptBeacon, beaconSnippet, detectAgentKind } from '../lib/skillbase/adapters/beacon.ts';
 import { adaptClaudeHook, type ClaudeHookPayload } from '../lib/skillbase/adapters/claude-code.ts';
@@ -191,7 +191,7 @@ function runInit(args: Args): void {
   }
 
   process.stdout.write('\nwiring hooks\n');
-  const command = str(args.flags, 'command') ?? 'npx -y skillbase';
+  const command = str(args.flags, 'command') ?? selfCommand();
   for (const result of [enrollClaudeCode({ command, dryRun }), enrollCodex({ command, dryRun })]) {
     process.stdout.write(`  ${result.agent.padEnd(12)} ${result.changed ? 'configured' : 'already set up'}\n`);
   }
@@ -212,6 +212,32 @@ function runInit(args: Args): void {
   }
   if (dryRun) process.stdout.write('\n(dry run — nothing written)\n');
   process.stdout.write('\n');
+}
+
+/**
+ * The command agents should run for each hook.
+ *
+ * Prefers this binary's own absolute path. Hooks fire on the critical path of
+ * every skill call, so resolving a package over the network each time would add
+ * latency and a network dependency to something that must be fast and offline-
+ * safe. It is also the only correct answer for a curl install: `npx skillbase`
+ * would reference a package that may not be published, wiring up hooks that
+ * silently never run.
+ *
+ * The exception is running via `npx` itself, where this file lives in a
+ * throwaway cache directory that will not exist later — there the package
+ * reference is the durable one.
+ */
+function selfCommand(): string {
+  const self = process.argv[1];
+  if (!self) return 'npx -y skillbase';
+
+  const resolved = resolve(self);
+  const ephemeral = /[/\\](_npx|\.npm[/\\]_cacache|node_modules[/\\]\.bin)[/\\]/.test(resolved);
+  if (ephemeral || !existsSync(resolved)) return 'npx -y skillbase';
+
+  // Quote defensively: the path may contain spaces on macOS and Windows.
+  return resolved.includes(' ') ? `"${resolved}"` : resolved;
 }
 
 /** Whether the agent is installed at all, independent of having skills. */
