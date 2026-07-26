@@ -1,2 +1,3 @@
-dist/
+# The built bundle IS the distributed artifact: install.sh downloads it straight
+# from the repo, so it is committed rather than ignored.
 *.tgz
