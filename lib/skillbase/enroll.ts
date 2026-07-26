@@ -155,8 +155,54 @@ export function enrollCodex(options: EnrollOptions = {}): EnrollResult {
 }
 
 /**
- * Codex gates hooks behind a feature flag. Reported rather than edited:
- * config.toml is hand-maintained and rewriting TOML loses comments and ordering.
+ * Turn on Codex's hooks feature flag.
+ *
+ * Appends a `[features]` table rather than parsing and rewriting the file:
+ * config.toml is hand-maintained, and a naive round-trip would lose comments and
+ * ordering. Appending a new table at the end is well-defined in TOML.
+ *
+ * Refuses when a `[features]` table already exists — a duplicate table header is
+ * a parse error, and silently corrupting the user's Codex config to save them
+ * one line is a bad trade. In that case the caller reports the edit instead.
+ */
+export function enableCodexHooks(options: { dryRun?: boolean } = {}): {
+  ok: boolean;
+  reason: string;
+} {
+  if (codexHooksEnabled()) return { ok: true, reason: 'already enabled' };
+
+  const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex');
+  const configPath = join(codexHome, 'config.toml');
+
+  let toml = '';
+  try {
+    toml = readFileSync(configPath, 'utf8');
+  } catch {
+    // No config yet; creating one with just this table is safe.
+  }
+
+  if (/^\s*\[features\]/m.test(toml)) {
+    return { ok: false, reason: `add \`hooks = true\` under [features] in ${configPath}` };
+  }
+
+  if (options.dryRun) return { ok: true, reason: 'would enable' };
+
+  try {
+    mkdirSync(codexHome, { recursive: true });
+    const prefix = toml === '' || toml.endsWith('\n') ? '' : '\n';
+    writeFileSync(
+      configPath,
+      `${toml}${prefix}\n# Added by Skillbase: required for skill-usage hooks.\n[features]\nhooks = true\n`,
+      'utf8',
+    );
+    return { ok: true, reason: 'enabled' };
+  } catch (error) {
+    return { ok: false, reason: `could not write ${configPath}: ${String(error)}` };
+  }
+}
+
+/**
+ * Codex gates hooks behind a feature flag.
  *
  * The flag is `hooks`; `codex_hooks` is still accepted as a legacy alias, so
  * both are recognized here.

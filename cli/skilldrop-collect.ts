@@ -30,6 +30,7 @@ import { backfillCodex } from '../lib/skillbase/backfill/codex.ts';
 import {
   CODEX_TRUST_NOTE,
   codexHooksEnabled,
+  enableCodexHooks,
   enrollClaudeCode,
   enrollCodex,
 } from '../lib/skillbase/enroll.ts';
@@ -197,10 +198,11 @@ function runInit(args: Args): void {
   }
 
   if (detected.includes('codex')) {
-    process.stdout.write(`\n${CODEX_TRUST_NOTE}\n`);
-    if (!codexHooksEnabled()) {
-      process.stdout.write('\nAlso add to ~/.codex/config.toml:\n  [features]\n  hooks = true\n');
-    }
+    const flag = enableCodexHooks({ dryRun });
+    process.stdout.write(`  ${'codex flag'.padEnd(12)} ${flag.ok ? 'enabled' : 'NEEDS YOU'} — ${flag.reason}\n`);
+    // Trust cannot be automated -- that is the point of it -- so it is always
+    // stated rather than detected, and it is the last thing printed.
+    process.stdout.write(`\none manual step remains\n\n${CODEX_TRUST_NOTE}\n`);
   }
 
   process.stdout.write('\nnext\n');

@@ -1229,6 +1229,35 @@ function enrollCodex(options = {}) {
     note: changed ? "hooks added — enable `[features] hooks = true` and trust the hooks (see below)" : "already enrolled"
   };
 }
+function enableCodexHooks(options = {}) {
+  if (codexHooksEnabled())
+    return { ok: true, reason: "already enabled" };
+  const codexHome = process.env.CODEX_HOME ?? join6(homedir5(), ".codex");
+  const configPath = join6(codexHome, "config.toml");
+  let toml = "";
+  try {
+    toml = readFileSync6(configPath, "utf8");
+  } catch {}
+  if (/^\s*\[features\]/m.test(toml)) {
+    return { ok: false, reason: `add \`hooks = true\` under [features] in ${configPath}` };
+  }
+  if (options.dryRun)
+    return { ok: true, reason: "would enable" };
+  try {
+    mkdirSync3(codexHome, { recursive: true });
+    const prefix = toml === "" || toml.endsWith(`
+`) ? "" : `
+`;
+    writeFileSync3(configPath, `${toml}${prefix}
+# Added by Skillbase: required for skill-usage hooks.
+[features]
+hooks = true
+`, "utf8");
+    return { ok: true, reason: "enabled" };
+  } catch (error) {
+    return { ok: false, reason: `could not write ${configPath}: ${String(error)}` };
+  }
+}
 function codexHooksEnabled() {
   const codexHome = process.env.CODEX_HOME ?? join6(homedir5(), ".codex");
   const configPath = join6(codexHome, "config.toml");
@@ -1681,16 +1710,14 @@ wiring hooks
 `);
   }
   if (detected.includes("codex")) {
+    const flag = enableCodexHooks({ dryRun });
+    process.stdout.write(`  ${"codex flag".padEnd(12)} ${flag.ok ? "enabled" : "NEEDS YOU"} \u2014 ${flag.reason}
+`);
     process.stdout.write(`
+one manual step remains
+
 ${CODEX_TRUST_NOTE}
 `);
-    if (!codexHooksEnabled()) {
-      process.stdout.write(`
-Also add to ~/.codex/config.toml:
-  [features]
-  hooks = true
-`);
-    }
   }
   process.stdout.write(`
 next
