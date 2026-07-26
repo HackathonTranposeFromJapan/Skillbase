@@ -20,7 +20,7 @@ function ago(iso: string): string {
 }
 
 export default async function Dashboard() {
-  const { skills: SKILLS, shadow, source } = await getCatalog();
+  const { skills: SKILLS, shadow, source, hiddenByPermission, accessEnforced } = await getCatalog();
 
   const totalInstalls = SKILLS.reduce((n, s) => n + s.installs, 0);
   const totalActive = SKILLS.reduce((n, s) => n + s.activeUsers, 0);
@@ -79,6 +79,14 @@ export default async function Dashboard() {
           Which internal AI workflows are actually spreading — and which ones people quietly
           abandon.
         </p>
+        {accessEnforced && (
+          <p className="mt-2 font-mono text-[10.5px] uppercase tracking-wider text-amber-300/80">
+            access enforced ·{" "}
+            {hiddenByPermission > 0
+              ? `${hiddenByPermission} skill${hiddenByPermission === 1 ? "" : "s"} hidden by your permissions`
+              : "you can see every tier"}
+          </p>
+        )}
         <p className="mt-2 font-mono text-[10.5px] uppercase tracking-wider text-mute-400">
           {source === "db"
             ? "live · measured from collected agent telemetry"

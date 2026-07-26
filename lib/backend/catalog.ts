@@ -12,11 +12,14 @@
  */
 
 import { DEMO_TENANT_ID, query, type DataSource } from '@/lib/db';
+import { canSee, getViewer, type Visibility } from '@/lib/backend/visibility';
 import { SKILLS, type Skill } from '@/lib/skills';
 
 export type MeasuredSkill = Omit<Skill, 'retention30d'> & {
   /** True when this skill's numbers came from recorded events. */
   measured: boolean;
+  /** Governance level this skill is published at. */
+  visibility: Visibility;
   /**
    * `null` when retention is unknown, which is different from zero.
    *
@@ -32,6 +35,10 @@ export type MeasuredSkill = Omit<Skill, 'retention30d'> & {
 export interface CatalogResult {
   source: DataSource;
   skills: MeasuredSkill[];
+  /** Skills withheld by RBAC, so the UI can say so instead of silently dropping them. */
+  hiddenByPermission: number;
+  /** True when a real Hexclave session decided what is visible. */
+  accessEnforced: boolean;
   /** Skills observed in telemetry that no one has registered. */
   shadow: ShadowSkill[];
 }
@@ -184,7 +191,13 @@ export async function getCatalog(): Promise<CatalogResult> {
   ]);
 
   if (metrics === null) {
-    return { source: 'seed', skills: SKILLS.map(asUnmeasured), shadow: [] };
+    return {
+      source: 'seed',
+      skills: SKILLS.map(asUnmeasured),
+      shadow: [],
+      hiddenByPermission: 0,
+      accessEnforced: false,
+    };
   }
 
   const bySlug = new Map(metrics.map((row) => [row.slug, row]));
@@ -216,7 +229,16 @@ export async function getCatalog(): Promise<CatalogResult> {
     .map((row) => applyMetrics(fromRegistry(row)))
     .filter((skill) => skill.measured);
 
-  const skills: MeasuredSkill[] = [...SKILLS.map(applyMetrics), ...registered];
+  const all: MeasuredSkill[] = [
+    ...SKILLS.map((s) => applyMetrics({ ...s, visibility: seedVisibility(s) })),
+    ...registered,
+  ];
+
+  // Enforced server-side; see lib/backend/visibility.ts for why signed-out is
+  // not the same as denied.
+  const viewer = await getViewer();
+  const skills = all.filter((s) => canSee(viewer, s.visibility));
+  const hiddenByPermission = all.length - skills.length;
 
   const shadow: ShadowSkill[] = (shadowRows ?? []).map((row) => ({
     name: row.name,
@@ -226,7 +248,13 @@ export async function getCatalog(): Promise<CatalogResult> {
     lastSeen: new Date(row.last_seen).toISOString(),
   }));
 
-  return { source: 'db', skills, shadow };
+  return {
+    source: 'db',
+    skills,
+    shadow,
+    hiddenByPermission,
+    accessEnforced: viewer.enforced,
+  };
 }
 
 interface RegistryRow {
@@ -248,7 +276,10 @@ interface RegistryRow {
  * made up.
  */
 /** A catalogue entry before metrics are applied. */
-type CatalogEntry = Omit<Skill, 'retention30d'> & { retention30d: number | null };
+type CatalogEntry = Omit<Skill, 'retention30d'> & {
+  retention30d: number | null;
+  visibility: Visibility;
+};
 
 function fromRegistry(row: RegistryRow): CatalogEntry {
   return {
@@ -261,6 +292,7 @@ function fromRegistry(row: RegistryRow): CatalogEntry {
     tags: row.tags ?? [],
     requiredRole: 'employee',
     official: row.visibility === 'official',
+    visibility: (row.visibility as Visibility) ?? 'company',
     version: '',
     updatedAt: new Date(row.created_at).toISOString(),
     author: '',
@@ -282,8 +314,17 @@ export async function getSkillDetail(slug: string): Promise<MeasuredSkill | null
   return skills.find((s) => s.slug === slug) ?? null;
 }
 
+/**
+ * Seed skills predate the visibility column, so it is derived from what the seed
+ * file does encode: a restricted `requiredRole` is the manager-approved tier.
+ */
+function seedVisibility(skill: Skill): Visibility {
+  if (skill.requiredRole && skill.requiredRole !== 'employee') return 'manager_approved';
+  return skill.official ? 'official' : 'company';
+}
+
 function asUnmeasured(skill: Skill): MeasuredSkill {
-  return { ...skill, measured: false };
+  return { ...skill, visibility: seedVisibility(skill), measured: false };
 }
 
 function toInt(value: string | null, fallback: number): number {
