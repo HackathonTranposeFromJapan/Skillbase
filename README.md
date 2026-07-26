@@ -1,177 +1,131 @@
 # Skillbase
 
-Skillbase is an in-company AI skills manager that helps teams discover, install, recommend, and measure reusable AI-agent skills across an organization.
+**Turn proven work into company capability.** Describe the outcome you want, install the workflow
+a colleague already proved, and onboard new teammates from how your company actually works.
 
-As companies adopt AI agents such as Claude Code, Cursor, Codex, and internal automation tools, teams quickly accumulate prompts, workflows, MCP tools, and domain-specific agent capabilities. Skillbase gives companies a private system of record for those skills so employees can find the right workflow, install it quickly, and see which skills are actually useful.
+Built at **c0mpiled-13: Startup School Hackathon II** (Transpose Platform, SF — July 25, 2026).
+YC RFS tracks: *Company Brain* / *The AI Operating System for Companies*.
 
-## Problem
+---
 
-Companies are creating more internal AI-agent skills every day, but those skills are usually scattered across documents, Slack messages, repositories, and individual team workflows.
+## The problem
 
-This creates several problems:
+Every company adopting AI agents is quietly accumulating skills — prompts, workflows, MCP tools,
+review checklists. They live in Notion pages, Slack threads, and one senior engineer's dotfiles.
 
-- Employees do not know which internal skills already exist.
-- Teams duplicate similar workflows across departments.
-- Managers cannot tell which skills are actually being used.
-- Skill updates are hard to announce and distribute.
-- New employees have no simple way to find skills for their role.
-- Companies lack data on whether a skill improves productivity.
+The result:
 
-## Solution
+- Nobody knows which internal skills already exist, so five teams write the same one.
+- The person who wrote the good version has no way to distribute it.
+- Managers cannot tell which workflows are actually being used, so nobody can improve them.
+- A new hire's agent starts at zero on day one, while the company knows a great deal.
+- When the only person who knows a critical workflow is away, the company's operating system
+  quietly goes offline.
 
-Skillbase is a company-wide skills library and recommendation layer for AI-agent workflows.
+Companies solved this for code with npm, and for containers with a registry.
+**Agent skills have no registry.**
 
-Employees can describe what they need in natural language:
+## What Skillbase does
 
-> I am a designer looking for a skill that makes designs cleaner and more polished.
-
-Skillbase searches the company skill library, ranks the most relevant skills, and shows each skill with install data, adoption charts, expected impact, update history, and a one-click install action.
-
-## Core Features
-
-### Natural-Language Skill Search
-
-Users can search by describing the outcome they want, not by remembering an exact skill name.
-
-Example searches:
-
-- Make this UI look cleaner.
-- Find a skill for legal contract review.
-- Recommend a sales email writing workflow.
-- Which skills should a junior designer install first?
-
-### One-Click Skill Installation
-
-Users can install a recommended skill directly into their AI workflow.
-
-```bash
-npx skilldrop install <skill-name>
+```
+search by outcome  →  skilldrop install  →  your agent has the skill  →  adoption flows back
 ```
 
-SkillDrop is the CLI install layer for Skillbase. After setup, it can sync local skills and send approved usage events back to the company library.
+1. **Search by outcome, not by name.** *"I want a skill that makes product designs look cleaner
+   and more consistent"* → ranked skills, each with a one-line explanation of why it fits **your**
+   role and **your** words.
+2. **Install into a real agent.** `skilldrop install design-polish` writes a real
+   `SKILL.md` into `.claude/skills/` — the agent has the capability immediately.
+3. **Measure what spreads.** Installs and runs report back. The dashboard shows adoption by
+   department, what is growing, and — the useful half — **what people installed and then quietly
+   abandoned**.
+4. **Onboard from proven work.** Map single-owner skills, generate a role-specific first week,
+   and verify readiness by completing a real task with the same permissions as the team.
 
-### Usage Analytics
+## Try it
 
-Each skill can include analytics such as:
+```bash
+bun install
+bun link                   # puts `skilldrop` on your PATH
+bun dev                    # http://localhost:3100
 
-- Installs
-- Active users
-- Department adoption
-- Usage frequency
-- Retention after install
-- Version usage
-- Before and after productivity signals
+# in another terminal, from any project directory:
+skilldrop install design-polish
+cat .claude/skills/design-polish/SKILL.md
+```
 
-This helps teams understand which internal AI workflows are spreading and which ones need improvement.
+Then open `/dashboard` — your install appears in the activity feed, tagged `this session`.
 
-### Personalized Recommendations
+Open `/onboarding` for the interactive continuity scenario: put Maya on PTO, generate Alex's
+first week from her proven workflows, and complete his first real task behind a manager approval
+gate.
 
-Skillbase recommends skills based on role, department, seniority, existing workflows, and similar users.
+## What is real vs. seeded
 
-Example recommendations:
+We think this distinction matters more than a bigger number on a slide.
 
-- Designers in your team often use this visual polish skill.
-- This skill is trending among product managers.
-- People who switched from Skill A to Skill B completed tasks faster.
-- A newer version of your installed skill is available.
+| Real | Seeded |
+|---|---|
+| Natural-language ranking (Claude, per query, with generated reasons) | The 12 skills in the catalog |
+| `skilldrop install` writing an actual `SKILL.md` to disk | Historical install/run counts and adoption rates |
+| Install events reported to the registry and rendered live | The 10 backdated activity events |
+| Role-based install gating on restricted skills | — |
 
-### Skill Update Feed
+Every event produced during a session is tagged **`this session`** in the UI, and the dashboard
+states in plain text how many of the visible events are real. Nothing on screen claims to be
+production telemetry.
 
-When a team publishes or updates an internal skill, Skillbase can notify relevant users.
+## Ranking
 
-Example updates:
+`lib/rank.ts` runs a two-stage rank:
 
-- The Design QA skill was updated yesterday.
-- Your team created a new Figma-to-PRD skill.
-- A recommended legal review workflow is now available for your department.
+1. **Lexical prefilter** — weighted term matching over tags, name, tagline, description,
+   department, and role, plus a mild popularity prior. Deterministic, always available.
+2. **Model rerank** — the top candidates go to Claude, which reorders them and writes a
+   role-aware, query-specific reason for each.
 
-### Company Governance
+The model path degrades to the lexical ordering on any failure — no key, no network, bad JSON,
+timeout. The UI shows which engine answered (`claude-cli` / `claude-api` / `lexical`), so the
+fallback is visible rather than silent.
 
-Companies can control who can view, install, and manage each skill.
+It uses `ANTHROPIC_API_KEY` when set, and otherwise shells out to a local `claude` CLI session.
 
-Possible access levels:
+## Governance
 
-- Company-wide skills
-- Department-only skills
-- Manager-approved skills
-- Experimental beta skills
-- Admin-maintained official skills
+Skills carry a `requiredRole`. A designer searching for `contract-review` finds it — discovery is
+not the thing you want to restrict — but install is blocked, and the detail page offers a request
+path instead of the command. Enforcement lives at the registry, not in the client.
 
-## Hackathon Demo
+This is the natural home for a real identity provider; `requiredRole` is the seam.
 
-The hackathon MVP focuses on three main screens:
+## Layout
 
-1. **Ask / Search**
-   A prompt box where users describe the skill they need.
+```
+data/skills.json            12 seeded skills — catalog, metrics, and the SKILL.md body each one ships
+lib/rank.ts                 lexical prefilter + model rerank + fallback
+lib/events.ts               in-memory install/run event log
+lib/skills.ts               catalog access, role gating
+app/components/SearchClient.tsx   search + ranked results
+app/dashboard/page.tsx      adoption, growth, abandonment
+app/onboarding/page.tsx     knowledge continuity + role-specific onboarding demo
+app/skill/[slug]/page.tsx   detail + the exact file that gets installed
+cli/skilldrop.ts            install / list / uninstall + adoption reporting
+```
 
-2. **Skill Recommendations**
-   Ranked skill cards with install buttons, short explanations, install counts, adoption metrics, and simple charts.
+No database and no auth — the event log is in memory, which is the right scope for a five-hour
+build and an honest thing to say out loud.
 
-3. **Company Analytics Dashboard**
-   A dashboard showing trending skills, department adoption, usage activity, and recommendation insights.
+## Where this goes
 
-## MVP Scope
+The hackathon build covers discovery, installation, governance, and adoption analytics for skills
+that already exist. The interesting version is the next one:
 
-### User MVP
+- **Skills that write themselves** — compile a Slack thread or a merged PR review into a
+  candidate skill, and route it for approval.
+- **Impact, not just adoption** — pair install events with outcome data (review round-trips,
+  time-to-merge) to say which workflows actually made people faster.
+- **Cross-agent** — Claude Code, Cursor, Codex, and internal agents install from the same registry.
 
-- Search for skills with natural language.
-- Browse recommended skills.
-- View skill detail pages.
-- See adoption metrics and usage charts.
-- Install a skill with one click.
-- Receive basic role-based recommendations.
+## License
 
-### Admin MVP
-
-- Add and edit internal skills.
-- Categorize skills by department and role.
-- Mark skills as official, recommended, or experimental.
-- Track installs and usage.
-- View company-wide analytics.
-
-### CLI / Agent Integration MVP
-
-- `npx skilldrop install`
-- Local skill registry sync
-- Optional telemetry collection with company approval
-- Basic event tracking for install, run, update, and uninstall events
-
-## Example User Story
-
-A designer joins a company and wants to improve UI quality with internal AI workflows.
-
-They search:
-
-> I want a skill that makes product designs look cleaner and more consistent.
-
-Skillbase returns:
-
-1. Design Polish Skill
-2. Figma QA Reviewer
-3. Visual Hierarchy Feedback Agent
-4. Brand Consistency Checker
-
-Each result shows usage rate, rating, install count, adoption chart, and estimated productivity impact. The designer clicks **Install**, and the skill becomes available in their AI-agent environment.
-
-## Why Skillbase Is Different
-
-Skillbase is not a public prompt marketplace. It is a private skill management and intelligence layer for companies using AI agents internally.
-
-Skillbase focuses on:
-
-- Internal workflows
-- Company-specific best practices
-- Skill adoption analytics
-- Productivity impact measurement
-- Role-based recommendations
-- Permission and governance controls
-
-## Positioning
-
-> Skillbase helps companies manage, recommend, and measure internal AI-agent skills.
-
-## Future Vision
-
-The first version focuses on discovery, installation, analytics, and recommendations for skills that already exist or are manually added by teams.
-
-Over time, Skillbase can become the intelligence layer for how companies operate with AI agents: tracking what workflows people use, recommending better automations, and helping teams continuously improve their internal AI capabilities.
+MIT
