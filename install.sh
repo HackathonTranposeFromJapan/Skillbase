@@ -15,11 +15,15 @@ RAW="https://raw.githubusercontent.com/HackathonTranposeFromJapan/Skillbase/main
 BIN_NAME="skillbase"
 
 RUN_INIT=1
-for arg in "$@"; do
-  case "$arg" in
+# `while [ $# -gt 0 ]` rather than `for arg in "$@"`: bash 3.2 — still the
+# default /bin/sh on macOS — can treat an empty "$@" as an unbound variable
+# under `set -u`, which would abort before printing anything.
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-init) RUN_INIT=0 ;;
-    --dir=*)   INSTALL_DIR="${arg#--dir=}" ;;
+    --dir=*)   INSTALL_DIR="${1#--dir=}" ;;
   esac
+  shift
 done
 
 say()  { printf '%s\n' "$*"; }
@@ -48,7 +52,13 @@ fi
 mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR"
 
 TARGET="$INSTALL_DIR/$BIN_NAME"
-TMP="$(mktemp)" || die "cannot create a temporary file"
+
+# BSD `mktemp` — macOS, where most of this audience is — requires a template;
+# only GNU coreutils accepts a bare `mktemp`. Calling it with no argument made
+# the installer abort on every Mac, installing nothing.
+TMP="$(mktemp "${TMPDIR:-/tmp}/skillbase.XXXXXX" 2>/dev/null)" ||
+  TMP="${TMPDIR:-/tmp}/skillbase.$$"
+: > "$TMP" || die "cannot create a temporary file in ${TMPDIR:-/tmp}"
 trap 'rm -f "$TMP"' EXIT INT TERM
 
 # --- download --------------------------------------------------------------
@@ -71,25 +81,37 @@ if ! head -n 1 "$TMP" | grep -q '^#!/usr/bin/env node'; then
 fi
 
 mv "$TMP" "$TARGET"
-chmod +x "$TARGET"
+# Explicit mode rather than `chmod +x`, which applies the umask and on some
+# systems leaves the file unreadable to anyone but the owner.
+chmod 755 "$TARGET"
 trap - EXIT INT TERM
 
 say "installed $TARGET"
 
 # --- PATH ------------------------------------------------------------------
+# Whether `skillbase` is callable by name decides whether the next command a
+# user types does anything at all, so this is stated plainly and every follow-up
+# command below is printed as an absolute path that works regardless.
+ON_PATH=0
 case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;;
-  *)
-    say ""
-    say "note: $INSTALL_DIR is not on your PATH. Add it with:"
-    say "  export PATH=\"$INSTALL_DIR:\$PATH\""
-    ;;
+  *":$INSTALL_DIR:"*) ON_PATH=1 ;;
 esac
+
+CMD="$TARGET"
+[ "$ON_PATH" -eq 1 ] && CMD="$BIN_NAME"
 
 # --- wire it up ------------------------------------------------------------
 if [ "$RUN_INIT" -eq 1 ]; then
-  "$TARGET" init || say "init did not complete; run '$BIN_NAME init' yourself."
-else
+  "$TARGET" init || say "init did not complete; run '$CMD init' yourself."
+fi
+
+say ""
+say "next — see the skill usage you already have (nothing is uploaded):"
+say "  $CMD backfill claude --dry-run"
+
+if [ "$ON_PATH" -eq 0 ]; then
   say ""
-  say "run '$BIN_NAME init' to detect your agents and wire up telemetry."
+  say "note: $INSTALL_DIR is not on your PATH, so typing '$BIN_NAME' will not work"
+  say "      until you add it:"
+  say "  export PATH=\"$INSTALL_DIR:\$PATH\""
 fi

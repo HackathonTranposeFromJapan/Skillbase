@@ -1840,12 +1840,13 @@ one manual step remains
 ${CODEX_TRUST_NOTE}
 `);
   }
+  const self = selfCommand();
   process.stdout.write(`
 next
 `);
-  process.stdout.write(`  npx skillbase backfill claude   # recover past usage, no waiting
+  process.stdout.write(`  ${self} backfill claude --dry-run   # see past usage, nothing uploaded
 `);
-  process.stdout.write(`  npx skillbase status            # what has been collected
+  process.stdout.write(`  ${self} status                      # what has been collected
 `);
   if (!process.env.SKILLBASE_INGEST_URL) {
     process.stdout.write(`

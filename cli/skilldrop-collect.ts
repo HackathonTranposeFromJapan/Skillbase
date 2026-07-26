@@ -215,9 +215,13 @@ function runInit(args: Args): void {
     process.stdout.write(`\none manual step remains\n\n${CODEX_TRUST_NOTE}\n`);
   }
 
+  // Printed as whatever actually invokes this build. `npx skillbase` is not a
+  // working command until the package is published, and telling someone to run
+  // something that silently does nothing is how "it had no effect" happens.
+  const self = selfCommand();
   process.stdout.write('\nnext\n');
-  process.stdout.write('  npx skillbase backfill claude   # recover past usage, no waiting\n');
-  process.stdout.write('  npx skillbase status            # what has been collected\n');
+  process.stdout.write(`  ${self} backfill claude --dry-run   # see past usage, nothing uploaded\n`);
+  process.stdout.write(`  ${self} status                      # what has been collected\n`);
   if (!process.env.SKILLBASE_INGEST_URL) {
     process.stdout.write('\n  set SKILLBASE_INGEST_URL to send events to your Skillbase server.\n');
     process.stdout.write('  until then events queue locally and nothing is transmitted.\n');
