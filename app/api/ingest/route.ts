@@ -21,8 +21,16 @@ const MAX_BATCH = 5_000;
 export async function POST(req: Request): Promise<NextResponse> {
   // Who the events belong to is decided by the token, never by the payload —
   // otherwise any caller could attribute activity to anyone.
+  //
+  // Rejecting anonymous callers outright is the right production posture but the
+  // wrong default: it would mean a fresh clone collects nothing until someone
+  // completes a browser login, and it silently breaks the collector, which keeps
+  // its spool and retries. So anonymous events are accepted into the demo tenant
+  // and only *attributed* when a token proves who sent them. Set
+  // SKILLBASE_REQUIRE_AUTH=1 to enforce.
   const caller = await resolveCaller(bearerToken(req));
-  if (hexclaveEnabled() && !caller.authenticated) {
+  const requireAuth = process.env.SKILLBASE_REQUIRE_AUTH === '1';
+  if (requireAuth && hexclaveEnabled() && !caller.authenticated) {
     return NextResponse.json(
       { error: 'unauthorized — run `skillbase login` first' },
       { status: 401 },
