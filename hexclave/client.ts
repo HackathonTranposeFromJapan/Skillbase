@@ -11,12 +11,22 @@ import { HexclaveClientApp } from '@hexclave/next';
  * Hexclave supplies both: a team is the tenant, a user is the principal, and its
  * CLI auth flow is what lets a terminal on someone's laptop prove who it belongs
  * to before its telemetry is accepted.
+ *
+ * Constructed lazily: `new HexclaveClientApp` throws without
+ * `NEXT_PUBLIC_STACK_PROJECT_ID`, which used to fail `next build` on a fresh
+ * clone with no `.env.local`. Every call site is gated on
+ * `hexclaveConfigured()`, so nothing touches this before the env exists.
  */
-export const hexclaveClientApp = new HexclaveClientApp({
-  tokenStore: 'nextjs-cookie',
-  urls: {
-    default: {
-      type: 'hosted',
+let app: HexclaveClientApp | null = null;
+
+export function getHexclaveClientApp(): HexclaveClientApp {
+  app ??= new HexclaveClientApp({
+    tokenStore: 'nextjs-cookie',
+    urls: {
+      default: {
+        type: 'hosted',
+      },
     },
-  },
-});
+  });
+  return app;
+}
